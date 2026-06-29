@@ -19,7 +19,7 @@ export default async function handler(req, res) {
     let hasMore = true;
 
     while (hasMore) {
-      const url = `https://api.clickup.com/api/v2/list/${LIST_ID}/task?include_closed=true&page=${page}&custom_fields=true&subtasks=true`;
+      const url = `https://api.clickup.com/api/v2/list/${LIST_ID}/task?include_closed=true&page=${page}&subtasks=true`;
       const response = await fetch(url, {
         headers: { Authorization: API_KEY }
       });
