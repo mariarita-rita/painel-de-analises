@@ -101,6 +101,8 @@ export default async function handler(req, res) {
       return {
         id: t.id,
         name: t.name || '',
+        assunto: t.name || '',
+        date_created: t.date_created || null,
         status: t.status?.status || '',
         statusColor: t.status?.color || '',
         assignees: (t.assignees || []).map(a => a.username || a.email || '').filter(Boolean),
