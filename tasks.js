@@ -77,6 +77,25 @@ export default async function handler(req, res) {
         return '';
       };
 
+      // Campo tipo "pessoa" no ClickUp retorna um objeto ou array de objetos com username/email
+      const getPersonField = (...names) => {
+        for (const n of names) {
+          const f = cf.find(x => x.name?.toLowerCase().includes(n.toLowerCase()));
+          if (!f || f.value == null) continue;
+          const val = f.value;
+          if (Array.isArray(val)) {
+            const names2 = val.map(p => p.username || p.email || '').filter(Boolean);
+            if (names2.length) return names2.join(', ');
+          } else if (typeof val === 'object') {
+            const name2 = val.username || val.email || '';
+            if (name2) return name2;
+          } else if (val) {
+            return String(val);
+          }
+        }
+        return '';
+      };
+
       const lastComment = commentsMap[t.id];
 
       return {
@@ -88,7 +107,8 @@ export default async function handler(req, res) {
         due_date: t.due_date || null,
         url: t.url || '',
         nucleo: getField('núcleo', 'nucleo', 'id núcleo', 'id nucleo'),
-        cliente: getField('cliente', 'solicitante', 'empresa', 'company'),
+        cliente: getField('cliente', 'empresa', 'company'),
+        solicitante: getPersonField('solicitante'),
         jiraUrl: getField('jira issue url', 'jira url', 'jira issue', 'issue url'),
         ambiente: getField('ambiente'),
         urgencia: getField('urgência', 'urgencia'),
