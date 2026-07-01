@@ -103,6 +103,8 @@ export default async function handler(req, res) {
         name: t.name || '',
         assunto: t.name || '',
         date_created: t.date_created || null,
+        start_date: t.start_date || null,
+        date_closed: t.date_closed || null,
         status: t.status?.status || '',
         statusColor: t.status?.color || '',
         assignees: (t.assignees || []).map(a => a.username || a.email || '').filter(Boolean),
