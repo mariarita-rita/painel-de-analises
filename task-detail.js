@@ -13,35 +13,37 @@ export default async function handler(req, res) {
   if (!id) return res.status(400).json({ error: 'ID da tarefa obrigatório' });
 
   try {
-    // Busca comentários completos (sem limit)
-    const [commentsResp, activityResp] = await Promise.all([
+    // Busca comentários e histórico de task em paralelo
+    // O histórico de status no ClickUp fica em /task/{id}/history (field changes)
+    const [commentsResp, historyResp] = await Promise.all([
       fetch(`https://api.clickup.com/api/v2/task/${id}/comment`, {
         headers: { Authorization: API_KEY }
       }),
-      fetch(`https://api.clickup.com/api/v2/task/${id}/activity`, {
+      fetch(`https://api.clickup.com/api/v2/task/${id}/history?hist_fields[]=status`, {
         headers: { Authorization: API_KEY }
       })
     ]);
 
     const commentsData = commentsResp.ok ? await commentsResp.json() : { comments: [] };
-    const activityData = activityResp.ok ? await activityResp.json() : { history: [] };
+    const historyData = historyResp.ok ? await historyResp.json() : { history: [] };
 
     // Processa comentários
     const comments = (commentsData.comments || []).map(c => ({
       id: c.id,
-      text: c.comment_text || (c.comment || []).map(x => x.text).join('') || '',
+      text: c.comment_text || (c.comment || []).map(x => x.text || '').join('') || '',
       date: c.date || null,
-      author: c.user?.username || c.user?.email || 'Sistema',
-      reactions: c.reactions || []
+      author: c.user?.username || c.user?.email || 'Sistema'
     }));
 
-    // Filtra histórico de mudanças de status do activity log
-    const statusHistory = (activityData.history || [])
+    // Processa histórico de status
+    // A API retorna items com field = "status" e before/after com o valor
+    const history = historyData.history || [];
+    const statusHistory = history
       .filter(h => h.field === 'status')
       .map(h => ({
         date: h.date || null,
-        from: h.before?.status || '—',
-        to: h.after?.status || '—',
+        from: h.before || '—',
+        to: h.after || '—',
         user: h.user?.username || h.user?.email || 'Sistema'
       }));
 
