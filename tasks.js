@@ -35,40 +35,9 @@ export default async function handler(req, res) {
       page++;
     }
 
-    // Busca o último comentário de cada tarefa (em paralelo, em lotes para não estourar rate limit)
-    const BATCH_SIZE = 10;
-    const commentsMap = {};
-
-    for (let i = 0; i < allTasks.length; i += BATCH_SIZE) {
-      const batch = allTasks.slice(i, i + BATCH_SIZE);
-      const results = await Promise.all(
-        batch.map(async (t) => {
-          try {
-            const cResp = await fetch(`https://api.clickup.com/api/v2/task/${t.id}/comment?limit=1`, {
-              headers: { Authorization: API_KEY }
-            });
-            if (!cResp.ok) return { id: t.id, comment: null };
-            const cData = await cResp.json();
-            const latest = (cData.comments || [])[0];
-            if (!latest) return { id: t.id, comment: null };
-            return {
-              id: t.id,
-              comment: {
-                text: latest.comment_text || (latest.comment || []).map(c => c.text).join('') || '',
-                date: latest.date || null,
-                author: latest.user?.username || latest.user?.email || ''
-              }
-            };
-          } catch {
-            return { id: t.id, comment: null };
-          }
-        })
-      );
-      results.forEach(r => { commentsMap[r.id] = r.comment; });
-    }
-
     const tasks = allTasks.map(t => {
       const cf = t.custom_fields || [];
+
       const getField = (...names) => {
         for (const n of names) {
           const f = cf.find(x => x.name?.toLowerCase().includes(n.toLowerCase()));
@@ -77,18 +46,17 @@ export default async function handler(req, res) {
         return '';
       };
 
-      // Campo tipo "pessoa" no ClickUp retorna um objeto ou array de objetos com username/email
       const getPersonField = (...names) => {
         for (const n of names) {
           const f = cf.find(x => x.name?.toLowerCase().includes(n.toLowerCase()));
           if (!f || f.value == null) continue;
           const val = f.value;
           if (Array.isArray(val)) {
-            const names2 = val.map(p => p.username || p.email || '').filter(Boolean);
-            if (names2.length) return names2.join(', ');
+            const ns = val.map(p => p.username || p.email || '').filter(Boolean);
+            if (ns.length) return ns.join(', ');
           } else if (typeof val === 'object') {
-            const name2 = val.username || val.email || '';
-            if (name2) return name2;
+            const n2 = val.username || val.email || '';
+            if (n2) return n2;
           } else if (val) {
             return String(val);
           }
@@ -96,13 +64,12 @@ export default async function handler(req, res) {
         return '';
       };
 
-      const lastComment = commentsMap[t.id];
-
       return {
         id: t.id,
         name: t.name || '',
         assunto: t.name || '',
         date_created: t.date_created || null,
+        date_updated: t.date_updated || null,
         start_date: t.start_date || null,
         date_closed: t.date_closed || null,
         status: t.status?.status || '',
@@ -117,8 +84,6 @@ export default async function handler(req, res) {
         ambiente: getField('ambiente'),
         urgencia: getField('urgência', 'urgencia'),
         tags: (t.tags || []).map(tag => ({ name: tag.name, color: tag.tag_fg || '#64748B' })),
-        lastCommentDate: lastComment?.date || null,
-        lastCommentAuthor: lastComment?.author || '',
       };
     });
 
