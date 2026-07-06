@@ -13,19 +13,18 @@ export default async function handler(req, res) {
   if (!id) return res.status(400).json({ error: 'ID da tarefa obrigatório' });
 
   try {
-    // Busca comentários e histórico de task em paralelo
-    // O histórico de status no ClickUp fica em /task/{id}/history (field changes)
     const [commentsResp, historyResp] = await Promise.all([
       fetch(`https://api.clickup.com/api/v2/task/${id}/comment`, {
         headers: { Authorization: API_KEY }
       }),
-      fetch(`https://api.clickup.com/api/v2/task/${id}/history?hist_fields[]=status`, {
+      // Busca todo o histórico sem filtro para ver a estrutura completa
+      fetch(`https://api.clickup.com/api/v2/task/${id}/history`, {
         headers: { Authorization: API_KEY }
       })
     ]);
 
     const commentsData = commentsResp.ok ? await commentsResp.json() : { comments: [] };
-    const historyData = historyResp.ok ? await historyResp.json() : { history: [] };
+    const historyData = historyResp.ok ? await historyResp.json() : {};
 
     // Processa comentários
     const comments = (commentsData.comments || []).map(c => ({
@@ -35,19 +34,35 @@ export default async function handler(req, res) {
       author: c.user?.username || c.user?.email || 'Sistema'
     }));
 
-    // Processa histórico de status
-    // A API retorna items com field = "status" e before/after com o valor
-    const history = historyData.history || [];
-    const statusHistory = history
-      .filter(h => h.field === 'status')
-      .map(h => ({
-        date: h.date || null,
-        from: h.before || '—',
-        to: h.after || '—',
-        user: h.user?.username || h.user?.email || 'Sistema'
-      }));
+    // O histórico pode estar em history, data ou outro campo — extrai tudo
+    const historyRaw = historyData.history || historyData.data || historyData.events || [];
 
-    return res.status(200).json({ comments, statusHistory });
+    const statusHistory = historyRaw
+      .filter(h => {
+        // Tenta detectar mudanças de status por diferentes formatos
+        return h.field === 'status' ||
+               h.type === 'status_updated' ||
+               (h.before?.status !== undefined) ||
+               (h.data?.field === 'status');
+      })
+      .map(h => {
+        const from = h.before?.status || h.before || h.data?.before || '—';
+        const to = h.after?.status || h.after || h.data?.after || '—';
+        return {
+          date: h.date || h.created_at || null,
+          from: typeof from === 'object' ? (from.status || JSON.stringify(from)) : String(from),
+          to: typeof to === 'object' ? (to.status || JSON.stringify(to)) : String(to),
+          user: h.user?.username || h.user?.email || h.assigned_by?.username || 'Sistema'
+        };
+      });
+
+    // Debug: retorna também a estrutura crua para diagnóstico
+    return res.status(200).json({
+      comments,
+      statusHistory,
+      _debug_history_keys: Object.keys(historyData),
+      _debug_first_item: historyRaw[0] || null
+    });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
