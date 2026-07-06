@@ -13,56 +13,56 @@ export default async function handler(req, res) {
   if (!id) return res.status(400).json({ error: 'ID da tarefa obrigatório' });
 
   try {
-    const [commentsResp, historyResp] = await Promise.all([
-      fetch(`https://api.clickup.com/api/v2/task/${id}/comment`, {
-        headers: { Authorization: API_KEY }
-      }),
-      // Busca todo o histórico sem filtro para ver a estrutura completa
-      fetch(`https://api.clickup.com/api/v2/task/${id}/history`, {
-        headers: { Authorization: API_KEY }
-      })
-    ]);
+    const commentsResp = await fetch(`https://api.clickup.com/api/v2/task/${id}/comment`, {
+      headers: { Authorization: API_KEY }
+    });
 
     const commentsData = commentsResp.ok ? await commentsResp.json() : { comments: [] };
-    const historyData = historyResp.ok ? await historyResp.json() : {};
+    const allComments = commentsData.comments || [];
 
-    // Processa comentários
-    const comments = (commentsData.comments || []).map(c => ({
-      id: c.id,
-      text: c.comment_text || (c.comment || []).map(x => x.text || '').join('') || '',
-      date: c.date || null,
-      author: c.user?.username || c.user?.email || 'Sistema'
-    }));
+    // Padrões que indicam mudança de status nos comentários de atividade do ClickUp
+    const STATUS_PATTERNS = [
+      /alterou o status de .+ para .+/i,
+      /changed the status from .+ to .+/i,
+      /status changed from .+ to .+/i,
+      /moved this task from .+ to .+/i,
+      /alterou o status para .+/i,
+    ];
 
-    // O histórico pode estar em history, data ou outro campo — extrai tudo
-    const historyRaw = historyData.history || historyData.data || historyData.events || [];
+    const isStatusChange = (text) => STATUS_PATTERNS.some(p => p.test(text));
 
-    const statusHistory = historyRaw
-      .filter(h => {
-        // Tenta detectar mudanças de status por diferentes formatos
-        return h.field === 'status' ||
-               h.type === 'status_updated' ||
-               (h.before?.status !== undefined) ||
-               (h.data?.field === 'status');
-      })
-      .map(h => {
-        const from = h.before?.status || h.before || h.data?.before || '—';
-        const to = h.after?.status || h.after || h.data?.after || '—';
-        return {
-          date: h.date || h.created_at || null,
-          from: typeof from === 'object' ? (from.status || JSON.stringify(from)) : String(from),
-          to: typeof to === 'object' ? (to.status || JSON.stringify(to)) : String(to),
-          user: h.user?.username || h.user?.email || h.assigned_by?.username || 'Sistema'
-        };
+    // Separa comentários normais de registros de mudança de status
+    const comments = [];
+    const statusHistory = [];
+
+    allComments.forEach(c => {
+      const text = c.comment_text || (c.comment || []).map(x => x.text || '').join('') || '';
+      const author = c.user?.username || c.user?.email || 'Sistema';
+      const date = c.date || null;
+
+      // Divide o texto em linhas — no ClickUp, atividades e comentários
+      // ficam na mesma entrada mas separados por \n
+      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+      const statusLines = lines.filter(l => isStatusChange(l));
+      const commentLines = lines.filter(l => !isStatusChange(l));
+
+      // Se tem linhas de status, adiciona ao histórico
+      statusLines.forEach(line => {
+        statusHistory.push({ text: line, date, author });
       });
 
-    // Debug: retorna também a estrutura crua para diagnóstico
-    return res.status(200).json({
-      comments,
-      statusHistory,
-      _debug_history_keys: Object.keys(historyData),
-      _debug_first_item: historyRaw[0] || null
+      // Se tem linhas de comentário real, adiciona aos comentários
+      if (commentLines.length) {
+        comments.push({
+          id: c.id,
+          text: commentLines.join('\n'),
+          date,
+          author
+        });
+      }
     });
+
+    return res.status(200).json({ comments, statusHistory });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
