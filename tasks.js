@@ -116,7 +116,7 @@ export default async function handler(req, res) {
         jiraUrl: getField('jira issue url', 'jira url', 'jira issue', 'issue url'),
         ambiente: getField('ambiente'),
         urgencia: getField('urgência', 'urgencia'),
-        lastComment: lastComment?.text || '',
+        tags: (t.tags || []).map(tag => ({ name: tag.name, color: tag.tag_fg || '#64748B' })),
         lastCommentDate: lastComment?.date || null,
         lastCommentAuthor: lastComment?.author || '',
       };
