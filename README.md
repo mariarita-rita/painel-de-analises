@@ -21,7 +21,7 @@ analises-monitor/
 
 | Nome | Valor |
 |------|-------|
-| `CLICKUP_API_KEY` | sua chave da API do ClickUp |
+| `CLICKUP_API_KEY` | pk_42926569_SQW3J2N5BH5HFME8QOQEN5JN3HY6AEGR |
 | `CLICKUP_LIST_ID` | `901327701998` |
 
 Depois de configurar, clique em **Redeploy**.
