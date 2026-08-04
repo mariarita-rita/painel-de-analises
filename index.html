@@ -1413,7 +1413,10 @@ setInterval(loadTasks, 60000);
       <div class="detail-description-content" id="detail-description-content"></div>
       <button class="detail-description-toggle" id="detail-description-toggle" onclick="toggleDescription()"></button>
     </div>
-    <div class="detail-tabs" style="display:none"></div>
+    <div class="detail-tabs">
+      <button class="detail-tab active" id="tab-comments" onclick="switchTab('comments')">Comentários</button>
+      <button class="detail-tab" id="tab-history" onclick="switchTab('history')">Histórico de status</button>
+    </div>
     <div class="detail-body" id="detail-body">
       <div class="detail-loading">Carregando...</div>
     </div>
@@ -1562,6 +1565,12 @@ function toggleDescription() {
   toggle.textContent = recolhido ? 'ver mais' : 'ver menos';
 }
 
+function switchTab(tab) {
+  currentTab = tab;
+  document.getElementById('tab-comments').classList.toggle('active', tab === 'comments');
+  document.getElementById('tab-history').classList.toggle('active', tab === 'history');
+  renderDetailTab();
+}
 
 function initials(name) {
   return (name || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
@@ -1573,6 +1582,9 @@ let currentDetailTaskName = null;
 async function openDetailModal(taskId, taskName) {
   currentDetailTaskId = taskId;
   currentDetailTaskName = taskName;
+  currentTab = 'comments';
+  document.getElementById('tab-comments').classList.add('active');
+  document.getElementById('tab-history').classList.remove('active');
   document.getElementById('detail-title').textContent = taskName;
   document.getElementById('detail-meta').innerHTML = '';
   document.getElementById('detail-info').innerHTML = '';
@@ -1645,6 +1657,23 @@ function closeDetailModal() {
 
 function renderDetailTab() {
   const body = document.getElementById('detail-body');
+
+  if (currentTab === 'history') {
+    if (!currentDetailHistory.length) {
+      body.innerHTML = '<div class="detail-empty">Nenhuma mudança de status registrada.</div>';
+      return;
+    }
+    body.innerHTML = [...currentDetailHistory].reverse().map(h => `
+      <div class="timeline-item">
+        <div class="timeline-avatar">${initials(h.author)}</div>
+        <div class="timeline-content">
+          <div class="timeline-meta"><strong>${escapeHtml(h.author)}</strong> · ${h.date ? formatDateTime(h.date) : '—'}</div>
+          <div class="status-change">${escapeHtml(h.text)}</div>
+        </div>
+      </div>
+    `).join('');
+    return;
+  }
 
   if (!currentDetailComments.length) {
     body.innerHTML = '<div class="detail-empty">Nenhum comentário ainda.</div>';
