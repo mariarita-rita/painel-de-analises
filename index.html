@@ -6,32 +6,52 @@
 <title>Monitoramento de Análises — Londrisoft</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<!-- Inter 700 incluído para os títulos. A oficial da marca é a Effra, proprietária;
+     o guia autoriza a Inter como fallback. Sem o 700 o navegador sintetizaria
+     negrito falso nos títulos. -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --bg: #F4F7FC;
-    --surface: #ffffff;
-    --surface-2: #F8FAFC;
-    --border: #E2E8F0;
-    --border-strong: #CBD5E1;
-    --text: #0F172A;
-    --text-2: #64748B;
-    --text-3: #94A3B8;
-    --accent: #2563EB;
-    --accent-bg: #EFF6FF;
-    --accent-text: #1E40AF;
-    --success-bg: #f0fdf4;
+    /* ---- Paleta institucional Londrisoft ----
+       Mesmos tokens do dashboard de carteiras, que embute este painel em iframe. */
+    --brand: #3A86FF;        /* Azul Londrisoft — preenchimento, borda, ícone */
+    --brand-dark: #0A41B4;   /* Azul Profundo — texto sobre fundo claro, hover */
+    --brand-night: #000035;  /* Azul Noite — títulos e texto principal */
+    --brand-light: #A8C5FF;  /* Azul Claro — badges e chips */
+    --brand-bg: #F0F4FF;     /* Cinza Quase Branco — fundo de seção */
+    --neutral-200: #E5E7EB;  /* bordas e divisores */
+    --neutral-500: #6B7280;  /* texto secundário */
+    --neutral-700: #374151;  /* corpo de texto */
+    --green: #16A34A;
+    --yellow: #CA8A04;
+    --red: #DC2626;
+    --info: #2563EB;
+
+    /* ---- Tokens estruturais, apontando para a paleta acima ----
+       --brand NUNCA em texto pequeno: 3.48:1 sobre branco reprova o AA. Para
+       texto azul use --accent-text (--brand-dark, 8.65:1) ou --text
+       (--brand-night, 19.97:1). --brand fica em preenchimento, borda e ícone. */
+    --bg: var(--brand-bg);
+    --surface: #FFFFFF;
+    --surface-2: #F7F9FE;       /* --brand-bg clareado, para superfície interna */
+    --border: var(--neutral-200);
+    --border-strong: #C9D6F5;   /* --brand-bg escurecido, para divisor forte */
+    --text: var(--brand-night);
+    --text-2: var(--neutral-700);
+    --text-3: var(--neutral-500);
+    --accent: var(--brand);
+    --accent-bg: var(--brand-bg);
+    --accent-text: var(--brand-dark);
+    --success-bg: #F0FDF4;
     --success-text: #166534;
-    --warning-bg: #fffbeb;
-    --warning-text: #92400e;
-    --danger-bg: #fef2f2;
-    --danger-text: #991b1b;
-    --purple-bg: #f5f3ff;
-    --purple-text: #5b21b6;
-    --gray-bg: #F1F5F9;
-    --gray-text: #475569;
+    --warning-bg: #FEF9C3;
+    --warning-text: #854D0E;
+    --danger-bg: #FEF2F2;
+    --danger-text: #991B1B;
+    --gray-bg: #F1F3F7;
+    --gray-text: var(--neutral-700);
     --radius: 8px;
     --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
   }
@@ -39,7 +59,7 @@
 
   body {
     font-family: 'Inter', system-ui, sans-serif;
-    background: #F4F7FC;
+    background: var(--bg);
     color: var(--text);
     min-height: 100vh;
     font-size: 14px;
@@ -62,9 +82,9 @@
   }
 
   .topbar-left { display: flex; align-items: center; gap: 12px; }
-  .logo { width: 28px; height: 28px; background: #2563eb; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+  .logo { width: 28px; height: 28px; background: var(--brand); border-radius: 6px; display: flex; align-items: center; justify-content: center; }
   .logo svg { width: 16px; height: 16px; fill: white; }
-  .topbar-title { font-size: 15px; font-weight: 600; color: var(--text); }
+  .topbar-title { font-size: 15px; font-weight: 700; color: var(--text); }
   .topbar-sub { font-size: 12px; color: var(--text-3); }
   .topbar-right { display: flex; align-items: center; gap: 14px; }
   .last-update { font-size: 12px; color: var(--text-3); }
@@ -101,10 +121,10 @@
 
   .stat-label { font-size: 11px; font-weight: 500; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
   .stat-value { font-size: 28px; font-weight: 600; color: var(--text); line-height: 1; }
-  .stat-value.accent { color: #2563EB; }
-  .stat-value.jira   { color: #475569; }
-  .stat-value.entregar { color: #0369A1; }
-  .stat-value.muted  { color: #94A3B8; }
+  .stat-value.accent { color: var(--accent-text); }
+  .stat-value.jira   { color: var(--text-2); }
+  .stat-value.entregar { color: var(--success-text); }
+  .stat-value.muted  { color: var(--text-3); }
 
   /* RÉGUA DE STATUS */
   .journey-card {
@@ -165,8 +185,8 @@
   }
 
   .journey-step.active .journey-dot { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
-  .journey-step.block .journey-dot { background: #dc2626; }
-  .journey-step.pending .journey-dot { background: #d97706; }
+  .journey-step.block .journey-dot { background: var(--red); }
+  .journey-step.pending .journey-dot { background: var(--yellow); }
 
   .journey-label {
     font-size: 11px;
@@ -221,6 +241,14 @@
   }
   .legend-close:hover { color: var(--text); }
 
+  .legend-note {
+    font-size: 11px;
+    color: var(--text-2);
+    line-height: 1.45;
+    margin-bottom: 14px;
+  }
+  .legend-note strong { color: var(--text); font-weight: 600; }
+
   .legend-grid {
     display: flex;
     flex-direction: column;
@@ -236,9 +264,9 @@
     background: var(--border-strong); flex-shrink: 0; margin-top: 4px;
   }
   .legend-dot.active { background: var(--accent); }
-  .legend-dot.block  { background: #dc2626; }
-  .legend-dot.pending { background: #d97706; }
-  .legend-dot.done   { background: #888; }
+  .legend-dot.block  { background: var(--red); }
+  .legend-dot.pending { background: var(--yellow); }
+  .legend-dot.done   { background: var(--text-3); }
 
   .legend-item-text {}
   .legend-item-name { font-size: 12px; font-weight: 600; color: var(--text); }
@@ -379,10 +407,10 @@
     border-radius: 20px;
     white-space: nowrap;
   }
-  .dias-ok      { background: #DBEAFE; color: #1E40AF; }
-  .dias-medio   { background: #FEF9C3; color: #854D0E; }
-  .dias-alto    { background: #FEE2E2; color: #991B1B; }
-  .dias-neutro  { background: #F1F5F9; color: #64748B; }
+  .dias-ok      { background: var(--accent-bg); color: var(--accent-text); }
+  .dias-medio   { background: var(--warning-bg); color: var(--warning-text); }
+  .dias-alto    { background: var(--danger-bg); color: var(--danger-text); }
+  .dias-neutro  { background: var(--gray-bg); color: var(--gray-text); }
 
   thead th {
     background: var(--surface-2);
@@ -402,8 +430,8 @@
 
   tbody tr { border-bottom: 0.5px solid var(--border); }
   tbody tr:last-child { border-bottom: none; }
-  tbody tr:nth-child(even) { background: #F8FAFC; }
-  tbody tr:hover { background: #EFF6FF; }
+  tbody tr:nth-child(even) { background: var(--surface-2); }
+  tbody tr:hover { background: var(--accent-bg); }
 
   td {
     padding: 10px 10px;
@@ -443,7 +471,7 @@
 
   /* Linha clicável */
   tbody tr.clickable { cursor: pointer; }
-  tbody tr.clickable:hover { background: #EFF6FF; }
+  tbody tr.clickable:hover { background: var(--accent-bg); }
 
   /* Modal de detalhes */
   .detail-modal-overlay {
@@ -487,7 +515,7 @@
   }
   .btn-flag-modal:hover { background: #FEE2E2; }
 
-  .detail-header-left h2 { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  .detail-header-left h2 { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
   .detail-header-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 6px; }
 
   .detail-close {
@@ -610,20 +638,20 @@
   }
   .badge-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
 
-  .badge.novo        { background: var(--accent-bg); color: var(--accent-text); }
-  .badge.novo .badge-dot { background: var(--accent); }
-  .badge.andamento   { background: var(--warning-bg); color: var(--warning-text); }
-  .badge.andamento .badge-dot { background: #d97706; }
+  .badge.novo        { background: var(--brand-light); color: var(--brand-night); }
+  .badge.novo .badge-dot { background: var(--brand-dark); }
+  .badge.andamento   { background: var(--accent-bg); color: var(--accent-text); }
+  .badge.andamento .badge-dot { background: var(--brand); }
   .badge.bloqueado   { background: var(--danger-bg); color: var(--danger-text); }
-  .badge.bloqueado .badge-dot { background: #dc2626; }
-  .badge.aguardando  { background: var(--purple-bg); color: var(--purple-text); }
-  .badge.aguardando .badge-dot { background: #7c3aed; }
+  .badge.bloqueado .badge-dot { background: var(--red); }
+  .badge.aguardando  { background: var(--warning-bg); color: var(--warning-text); }
+  .badge.aguardando .badge-dot { background: var(--yellow); }
   .badge.entregar    { background: var(--success-bg); color: var(--success-text); }
-  .badge.entregar .badge-dot { background: #16a34a; }
+  .badge.entregar .badge-dot { background: var(--green); }
   .badge.finalizado  { background: var(--gray-bg); color: var(--gray-text); }
-  .badge.finalizado .badge-dot { background: #888; }
+  .badge.finalizado .badge-dot { background: var(--text-3); }
   .badge.outro       { background: var(--gray-bg); color: var(--gray-text); }
-  .badge.outro .badge-dot { background: #aaa; }
+  .badge.outro .badge-dot { background: var(--text-3); }
 
   .jira-link {
     color: var(--accent); text-decoration: none; font-size: 12px; font-weight: 500;
@@ -858,18 +886,32 @@ let currentFlagTaskId = null;
 let currentFlagTaskName = null;
 
 // ---- JORNADA DE STATUS ----
+// A régua identifica cada etapa por POSIÇÃO (ordem fixa do fluxo) e por RÓTULO
+// escrito. A cor não identifica — ela sinaliza estado, e por isso usa apenas as
+// cores semânticas da marca:
+//   neutro   = fila ou encerrado (nada a fazer agora)
+//   azul     = andamento (analista trabalhando)
+//   amarelo  = parado esperando alguém (cliente, Prod/Dev ou analista)
+//   vermelho = bloqueio
+//   verde    = concluindo
+// As 11 matizes anteriores usavam roxo, índigo, ciano e âmbar — proibidos pelo
+// guia da marca — e nunca funcionaram como diferenciação: ciano ficava em 2.43:1
+// e âmbar em 2.15:1 sobre branco, e ciano/índigo/roxo adjacentes são
+// indistinguíveis para daltonismo.
+// `color` pinta o dot; `textColor` pinta o rótulo, que é texto de 11px e precisa
+// de 4.5:1 — as cores de dot não alcançam isso sobre branco.
 const JOURNEY = [
-  { key: 'novo pedido',        label: 'Novo Pedido',        desc: 'Análise na fila dos analistas (sem responsável)', color: '#2563EB' },
-  { key: 'analisando n2',      label: 'Analisando N2',      desc: 'Analista já iniciou a análise da situação',        color: '#0EA5E9' },
-  { key: 'falta de dados',     label: 'Falta de Dados',     desc: 'Faltou informação suficiente para seguir a análise', color: '#F59E0B' },
-  { key: 'aguardando cliente', label: 'Aguard. Cliente',    desc: 'Aguardando retorno do cliente',                    color: '#8B5CF6' },
-  { key: 'abrir issue',        label: 'Abrir ISSUE',        desc: 'Preparar análise para escalar para Prod/Dev',      color: '#06B6D4' },
-  { key: 'aguardando jira',    label: 'Aguard. Jira',       desc: 'Aguardando Prod/Dev',                              color: '#6366F1' },
-  { key: 'sprint backlog',     label: 'Sprint Backlog',     desc: 'Em fila para entrar em sprint',                    color: '#0369A1' },
-  { key: 'block',              label: 'Block',              desc: 'Bloqueio técnico ou falta de informação',           color: '#DC2626' },
-  { key: 'interação pendente', label: 'Interação Pendente', desc: 'Prod/Dev aguardando o Analista',                   color: '#D97706' },
-  { key: 'entregar',           label: 'Entregar',           desc: 'Entrega do Analista para o cliente ou solicitante', color: '#16A34A' },
-  { key: 'finalizado',         label: 'Finalizado',         desc: 'Solicitação resolvida',                            color: '#94A3B8' },
+  { key: 'novo pedido',        label: 'Novo Pedido',        desc: 'Análise na fila dos analistas (sem responsável)',    color: '#6B7280', textColor: '#374151' },
+  { key: 'analisando n2',      label: 'Analisando N2',      desc: 'Analista já iniciou a análise da situação',          color: '#3A86FF', textColor: '#0A41B4' },
+  { key: 'falta de dados',     label: 'Falta de Dados',     desc: 'Faltou informação suficiente para seguir a análise', color: '#CA8A04', textColor: '#854D0E' },
+  { key: 'aguardando cliente', label: 'Aguard. Cliente',    desc: 'Aguardando retorno do cliente',                     color: '#CA8A04', textColor: '#854D0E' },
+  { key: 'abrir issue',        label: 'Abrir ISSUE',        desc: 'Preparar análise para escalar para Prod/Dev',        color: '#3A86FF', textColor: '#0A41B4' },
+  { key: 'aguardando jira',    label: 'Aguard. Jira',       desc: 'Aguardando Prod/Dev',                               color: '#CA8A04', textColor: '#854D0E' },
+  { key: 'sprint backlog',     label: 'Sprint Backlog',     desc: 'Em fila para entrar em sprint',                      color: '#3A86FF', textColor: '#0A41B4' },
+  { key: 'block',              label: 'Block',              desc: 'Bloqueio técnico ou falta de informação',            color: '#DC2626', textColor: '#991B1B' },
+  { key: 'interação pendente', label: 'Interação Pendente', desc: 'Prod/Dev aguardando o Analista',                    color: '#CA8A04', textColor: '#854D0E' },
+  { key: 'entregar',           label: 'Entregar',           desc: 'Entrega do Analista para o cliente ou solicitante',  color: '#16A34A', textColor: '#166534' },
+  { key: 'finalizado',         label: 'Finalizado',         desc: 'Solicitação resolvida',                             color: '#6B7280', textColor: '#374151' },
 ];
 
 function calcularDias(t) {
@@ -958,7 +1000,7 @@ function renderJourney(tasks) {
   // contagem sobre a lista inteira.
   const geral = filtrado ? countByStage(allTasks) : null;
 
-  const renderStep = (key, label, color, count, total) => {
+  const renderStep = (key, label, color, textColor, count, total) => {
     let cls = '';
     if (count > 0) {
       const k = normalizeStatus(key);
@@ -967,8 +1009,11 @@ function renderJourney(tasks) {
       else cls = 'active';
     }
 
-    const dotColor = count > 0 ? color : '#CBD5E1';
-    const labelColor = count > 0 ? color : 'var(--text-3)';
+    // Etapa sem contagem fica cinza-borda; com contagem, dot na cor semântica e
+    // rótulo no tom escuro correspondente, que é o que garante o 4.5:1 no texto
+    // de 11px. Nunca usar a cor do dot no rótulo.
+    const dotColor = count > 0 ? color : 'var(--border-strong)';
+    const labelColor = count > 0 ? textColor : 'var(--text-3)';
     const valor = total !== null
       ? `${count} <span class="journey-count-total">/ ${total}</span>`
       : `${count}`;
@@ -981,14 +1026,14 @@ function renderJourney(tasks) {
   };
 
   const steps = JOURNEY.map(j =>
-    renderStep(j.key, j.label, j.color, counts[j.key], geral ? geral.counts[j.key] : null)
+    renderStep(j.key, j.label, j.color, j.textColor, counts[j.key], geral ? geral.counts[j.key] : null)
   );
 
   // "Outros" só entra na régua quando existe status fora do fluxo — mas quando
   // entra, entra sempre com número, para a soma fechar visivelmente.
   const outrosGeral = geral ? geral.outros : 0;
   if (outros > 0 || outrosGeral > 0) {
-    steps.push(renderStep('outros', 'Outros', '#64748B', outros, geral ? outrosGeral : null));
+    steps.push(renderStep('outros', 'Outros', '#6B7280', '#374151', outros, geral ? outrosGeral : null));
   }
 
   document.getElementById('journey-track').innerHTML = steps.join('');
@@ -1708,51 +1753,52 @@ function renderDetailTab() {
       Legenda das etapas
       <button class="legend-close" onclick="document.getElementById('legend-modal').classList.remove('open')">✕</button>
     </h3>
+    <p class="legend-note">A cor indica o <strong>estado</strong>, não a etapa: cinza é fila ou encerrado, azul é em andamento, amarelo é parado esperando alguém, vermelho é bloqueio e verde é conclusão. Cada etapa é identificada pela posição na régua e pelo nome.</p>
     <div class="legend-grid">
       <div class="legend-item">
-        <div class="legend-dot" style="background:#2563EB"></div>
+        <div class="legend-dot" style="background:#6B7280"></div>
         <div class="legend-item-text">
           <div class="legend-item-name">Novo Pedido</div>
           <div class="legend-item-desc">Análise na fila dos analistas, sem responsável</div>
         </div>
       </div>
       <div class="legend-item">
-        <div class="legend-dot" style="background:#0EA5E9"></div>
+        <div class="legend-dot" style="background:#3A86FF"></div>
         <div class="legend-item-text">
           <div class="legend-item-name">Analisando N2</div>
           <div class="legend-item-desc">Analista já iniciou a análise da situação</div>
         </div>
       </div>
       <div class="legend-item">
-        <div class="legend-dot" style="background:#F59E0B"></div>
+        <div class="legend-dot" style="background:#CA8A04"></div>
         <div class="legend-item-text">
           <div class="legend-item-name">Falta de Dados</div>
           <div class="legend-item-desc">Informação insuficiente para seguir a análise</div>
         </div>
       </div>
       <div class="legend-item">
-        <div class="legend-dot" style="background:#8B5CF6"></div>
+        <div class="legend-dot" style="background:#CA8A04"></div>
         <div class="legend-item-text">
           <div class="legend-item-name">Aguard. Cliente</div>
           <div class="legend-item-desc">Aguardando retorno do cliente</div>
         </div>
       </div>
       <div class="legend-item">
-        <div class="legend-dot" style="background:#06B6D4"></div>
+        <div class="legend-dot" style="background:#3A86FF"></div>
         <div class="legend-item-text">
           <div class="legend-item-name">Abrir ISSUE</div>
           <div class="legend-item-desc">Preparar análise para escalar para Prod/Dev</div>
         </div>
       </div>
       <div class="legend-item">
-        <div class="legend-dot" style="background:#6366F1"></div>
+        <div class="legend-dot" style="background:#CA8A04"></div>
         <div class="legend-item-text">
           <div class="legend-item-name">Aguard. Jira</div>
           <div class="legend-item-desc">Aguardando resolução pelo time de Prod/Dev</div>
         </div>
       </div>
       <div class="legend-item">
-        <div class="legend-dot" style="background:#0369A1"></div>
+        <div class="legend-dot" style="background:#3A86FF"></div>
         <div class="legend-item-text">
           <div class="legend-item-name">Sprint Backlog</div>
           <div class="legend-item-desc">Em fila para entrar em sprint</div>
@@ -1766,7 +1812,7 @@ function renderDetailTab() {
         </div>
       </div>
       <div class="legend-item">
-        <div class="legend-dot" style="background:#D97706"></div>
+        <div class="legend-dot" style="background:#CA8A04"></div>
         <div class="legend-item-text">
           <div class="legend-item-name">Interação Pendente</div>
           <div class="legend-item-desc">Prod/Dev aguardando o Analista</div>
@@ -1780,7 +1826,7 @@ function renderDetailTab() {
         </div>
       </div>
       <div class="legend-item">
-        <div class="legend-dot" style="background:#94A3B8"></div>
+        <div class="legend-dot" style="background:#6B7280"></div>
         <div class="legend-item-text">
           <div class="legend-item-name">Finalizado</div>
           <div class="legend-item-desc">Solicitação resolvida</div>
