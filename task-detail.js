@@ -9,13 +9,36 @@ export default async function handler(req, res) {
   const API_KEY = process.env.CLICKUP_API_KEY;
   if (!API_KEY) return res.status(500).json({ error: 'Variáveis de ambiente não configuradas' });
 
-  const { id } = req.query;
+  const { id, withDescription } = req.query;
   if (!id) return res.status(400).json({ error: 'ID da tarefa obrigatório' });
 
+  // O front manda withDescription=0 quando já tem a descrição em cache da
+  // sessão, para não pagar a chamada de novo.
+  const buscarDescricao = withDescription !== '0';
+
   try {
-    const commentsResp = await fetch(`https://api.clickup.com/api/v2/task/${id}/comment`, {
-      headers: { Authorization: API_KEY }
-    });
+    // Comentários e detalhe da tarefa em paralelo — a descrição é um extra:
+    // se a chamada dela falhar, o endpoint segue entregando os comentários.
+    const [commentsResp, taskResp] = await Promise.all([
+      fetch(`https://api.clickup.com/api/v2/task/${id}/comment`, {
+        headers: { Authorization: API_KEY }
+      }),
+      buscarDescricao
+        ? fetch(`https://api.clickup.com/api/v2/task/${id}?include_markdown_description=true`, {
+            headers: { Authorization: API_KEY }
+          }).catch(() => null)
+        : Promise.resolve('skip')
+    ]);
+
+    let description = taskResp === 'skip' ? undefined : null;
+    if (taskResp && taskResp !== 'skip' && taskResp.ok) {
+      try {
+        const taskData = await taskResp.json();
+        description = taskData.markdown_description || taskData.description || taskData.text_content || '';
+      } catch {
+        description = null;
+      }
+    }
 
     const commentsData = commentsResp.ok ? await commentsResp.json() : { comments: [] };
     const allComments = commentsData.comments || [];
@@ -62,7 +85,7 @@ export default async function handler(req, res) {
       }
     });
 
-    return res.status(200).json({ comments, statusHistory });
+    return res.status(200).json({ comments, statusHistory, description });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }

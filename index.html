@@ -508,6 +508,47 @@
   .detail-info-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-3); margin-bottom: 2px; }
   .detail-info-value { font-size: 13px; color: var(--text); }
 
+  /* Descrição da análise — bloco de altura limitada com rolagem própria, para
+     que o modal não cresça e empurre as ações do cabeçalho fora da tela. */
+  .detail-description {
+    padding: 14px 24px 16px;
+    border-bottom: 0.5px solid var(--border);
+    flex-shrink: 0;
+  }
+  .detail-description-label {
+    font-size: 10px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--text-3); margin-bottom: 6px;
+  }
+  .detail-description-content {
+    font-size: 13px; color: var(--text); line-height: 1.55;
+    max-height: min(220px, 30vh); overflow-y: auto;
+    word-break: break-word;
+  }
+  .detail-description-content.collapsed { max-height: 96px; overflow-y: hidden; }
+  .detail-description-content p { margin: 0 0 8px; }
+  .detail-description-content p:last-child { margin-bottom: 0; }
+  .detail-description-content ul,
+  .detail-description-content ol { margin: 0 0 8px; padding-left: 20px; }
+  .detail-description-content li { margin-bottom: 2px; }
+  .detail-description-content code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px; background: var(--surface-2);
+    padding: 1px 4px; border-radius: 4px;
+  }
+  .detail-description-content pre {
+    background: var(--surface-2); border-radius: 6px;
+    padding: 8px 10px; margin: 0 0 8px; overflow-x: auto;
+  }
+  .detail-description-content pre code { background: none; padding: 0; }
+  .detail-description-content a { color: var(--accent-text); text-decoration: underline; }
+  .detail-description-content img { max-width: 100%; border-radius: 6px; margin: 4px 0; }
+  .detail-description-toggle {
+    background: none; border: none; cursor: pointer; font-family: inherit;
+    color: var(--accent-text); font-size: 11px; font-weight: 500;
+    padding: 6px 0 0; display: none;
+  }
+  .detail-description-empty { font-size: 13px; color: var(--text-3); }
+
   .detail-tabs {
     display: flex; gap: 0;
     border-bottom: 0.5px solid var(--border);
@@ -1367,6 +1408,11 @@ setInterval(loadTasks, 60000);
       </div>
     </div>
     <div class="detail-info-grid" id="detail-info"></div>
+    <div class="detail-description" id="detail-description">
+      <div class="detail-description-label">Descrição da análise</div>
+      <div class="detail-description-content" id="detail-description-content"></div>
+      <button class="detail-description-toggle" id="detail-description-toggle" onclick="toggleDescription()"></button>
+    </div>
     <div class="detail-tabs" style="display:none"></div>
     <div class="detail-body" id="detail-body">
       <div class="detail-loading">Carregando...</div>
@@ -1378,6 +1424,144 @@ setInterval(loadTasks, 60000);
 let currentDetailComments = [];
 let currentDetailHistory = [];
 let currentTab = 'comments';
+
+// Descrições já carregadas nesta sessão, por id de tarefa. Evita repetir a
+// chamada de detalhe da tarefa ao reabrir o mesmo modal.
+const descriptionCache = new Map();
+
+// escapeHtml (textContent -> innerHTML) NÃO escapa aspas, então não serve para
+// interpolar dentro de atributo. Para href/src precisamos fechar isso.
+function escapeAttr(str) {
+  return escapeHtml(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// Aceita apenas http/https. Rejeita javascript:, data:, vbscript: e afins.
+// Roda sobre texto já escapado, então uma URL ofuscada por entidades já chega
+// como texto literal e não casa com o padrão.
+function safeUrl(url) {
+  const u = (url || '').trim();
+  return /^https?:\/\/[^\s]+$/i.test(u) ? u : null;
+}
+
+// Conversor mínimo de markdown, sem biblioteca externa.
+// A ordem é obrigatória: escapa PRIMEIRO, converte um subconjunto controlado
+// depois. Nunca recebe markdown cru em innerHTML.
+function renderMarkdown(src) {
+  let s = escapeHtml(src || '');
+
+  // Blocos de código e código inline saem de cena antes das outras regras, para
+  // que markdown dentro de código não seja interpretado. Os marcadores usam um caractere de controle (\u0000),
+  // que não sobrevive ao escape e portanto não pode ser forjado pela entrada.
+  const blocos = [];
+  const guardar = (html) => `\u0000${blocos.push(html) - 1}\u0000`;
+
+  s = s.replace(/```[a-z0-9+#-]*\n?([\s\S]*?)```/gi, (_, code) =>
+    guardar(`<pre><code>${code.replace(/\n$/, '')}</code></pre>`));
+  s = s.replace(/`([^`\n]+)`/g, (_, code) => guardar(`<code>${code}</code>`));
+
+  // Imagens antes de links — a sintaxe de imagem contém a de link.
+  s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (m, alt, url) => {
+    const safe = safeUrl(url);
+    return safe ? `<img src="${escapeAttr(safe)}" alt="${escapeAttr(alt)}">` : m;
+  });
+
+  s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, texto, url) => {
+    const safe = safeUrl(url);
+    return safe
+      ? `<a href="${escapeAttr(safe)}" target="_blank" rel="noopener noreferrer">${texto}</a>`
+      : m;
+  });
+
+  // Negrito antes de itálico, senão ** é consumido como dois *.
+  s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/__([^_\n]+)__/g, '<strong>$1</strong>');
+  s = s.replace(/(^|[^*\w])\*([^*\n]+)\*(?![*\w])/g, '$1<em>$2</em>');
+  s = s.replace(/(^|[^_\w])_([^_\n]+)_(?![_\w])/g, '$1<em>$2</em>');
+
+  // Listas e parágrafos, linha a linha.
+  const linhas = s.split('\n');
+  const saida = [];
+  let lista = null;   // 'ul' | 'ol' | null
+  let paragrafo = [];
+
+  const fecharParagrafo = () => {
+    if (paragrafo.length) {
+      saida.push(`<p>${paragrafo.join('<br>')}</p>`);
+      paragrafo = [];
+    }
+  };
+  const fecharLista = () => {
+    if (lista) { saida.push(`</${lista}>`); lista = null; }
+  };
+
+  linhas.forEach(linha => {
+    const bruta = linha.trim();
+    const marcador = bruta.match(/^[-*+]\s+(.*)$/);
+    const numerada = bruta.match(/^\d+[.)]\s+(.*)$/);
+
+    if (marcador || numerada) {
+      fecharParagrafo();
+      const tipo = marcador ? 'ul' : 'ol';
+      if (lista !== tipo) { fecharLista(); saida.push(`<${tipo}>`); lista = tipo; }
+      saida.push(`<li>${(marcador || numerada)[1]}</li>`);
+    } else if (!bruta) {
+      fecharLista();
+      fecharParagrafo();
+    } else {
+      fecharLista();
+      paragrafo.push(bruta);
+    }
+  });
+  fecharLista();
+  fecharParagrafo();
+
+  // Devolve os blocos de código guardados. Índice inexistente fica como estava,
+  // para que um marcador vindo da entrada não vire "undefined" na tela.
+  return saida.join('').replace(/\u0000(\d+)\u0000/g, (m, i) => {
+    const bloco = blocos[Number(i)];
+    return bloco === undefined ? m : bloco;
+  });
+}
+
+function renderDescription(estado, texto) {
+  const bloco = document.getElementById('detail-description-content');
+  const toggle = document.getElementById('detail-description-toggle');
+
+  toggle.style.display = 'none';
+  bloco.classList.remove('collapsed');
+
+  if (estado === 'loading') {
+    bloco.innerHTML = '<div class="detail-description-empty">Carregando descrição…</div>';
+    return;
+  }
+  if (estado === 'error') {
+    bloco.innerHTML = '<div class="detail-description-empty">Não foi possível carregar a descrição.</div>';
+    return;
+  }
+  if (!texto || !texto.trim()) {
+    bloco.innerHTML = '<div class="detail-description-empty">Sem descrição cadastrada.</div>';
+    return;
+  }
+
+  bloco.innerHTML = renderMarkdown(texto);
+
+  // "ver mais" só aparece se o conteúdo realmente estourar a altura.
+  requestAnimationFrame(() => {
+    if (bloco.scrollHeight > bloco.clientHeight + 4) {
+      bloco.classList.add('collapsed');
+      toggle.textContent = 'ver mais';
+      toggle.style.display = 'block';
+    }
+  });
+}
+
+function toggleDescription() {
+  const bloco = document.getElementById('detail-description-content');
+  const toggle = document.getElementById('detail-description-toggle');
+  const recolhido = bloco.classList.toggle('collapsed');
+  toggle.textContent = recolhido ? 'ver mais' : 'ver menos';
+}
+
 
 function initials(name) {
   return (name || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
@@ -1414,14 +1598,37 @@ async function openDetailModal(taskId, taskName) {
     `;
   }
 
+  // Descrição em cache é pintada na hora, e o backend não refaz a chamada dela.
+  // Os comentários continuam sendo buscados sempre, para não servir dado velho.
+  const emCache = descriptionCache.has(taskId);
+  if (emCache) {
+    renderDescription('ok', descriptionCache.get(taskId));
+  } else {
+    renderDescription('loading');
+  }
+
   try {
-    const res = await fetch(`/api/task-detail?id=${taskId}`);
+    const res = await fetch(`/api/task-detail?id=${encodeURIComponent(taskId)}${emCache ? '&withDescription=0' : ''}`);
     const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
     currentDetailComments = data.comments || [];
     currentDetailHistory = data.statusHistory || [];
+
+    if (!emCache) {
+      if (data.description === null || data.description === undefined) {
+        // null = a chamada da descrição falhou no backend, sem derrubar o resto.
+        renderDescription(data.description === null ? 'error' : 'ok', '');
+      } else {
+        descriptionCache.set(taskId, data.description);
+        renderDescription('ok', data.description);
+      }
+    }
+
     renderDetailTab();
   } catch(e) {
-    document.getElementById('detail-body').innerHTML = `<div class="detail-empty">Erro ao carregar: ${e.message}</div>`;
+    if (!emCache) renderDescription('error');
+    document.getElementById('detail-body').innerHTML = `<div class="detail-empty">Erro ao carregar: ${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -1438,6 +1645,7 @@ function closeDetailModal() {
 
 function renderDetailTab() {
   const body = document.getElementById('detail-body');
+
   if (!currentDetailComments.length) {
     body.innerHTML = '<div class="detail-empty">Nenhum comentário ainda.</div>';
     return;
