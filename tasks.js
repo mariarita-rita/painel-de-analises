@@ -24,6 +24,19 @@ export default async function handler(req, res) {
         headers: { Authorization: API_KEY }
       });
 
+      // 429 tem tratamento próprio: mensagem clara e Retry-After repassado, sem
+      // retry automático. Reenviar na hora só agrava o estouro de uma cota que é
+      // compartilhada com os outros painéis.
+      if (response.status === 429) {
+        const retryAfter = response.headers?.get?.('Retry-After');
+        if (retryAfter) res.setHeader('Retry-After', retryAfter);
+        return res.status(429).json({
+          error: 'Limite de requisições do ClickUp atingido. Aguarde alguns segundos e tente novamente.',
+          rateLimited: true,
+          retryAfter: retryAfter || null
+        });
+      }
+
       if (!response.ok) {
         const err = await response.text();
         return res.status(response.status).json({ error: `Erro ClickUp: ${err}` });

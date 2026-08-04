@@ -136,6 +136,19 @@ export default async function handler(req, res) {
       body: JSON.stringify({ comment_text: commentText, notify_all: true })
     });
 
+    // 429 antes do erro genérico: a sinalização não foi registrada, e o usuário
+    // precisa saber que é limite de cota e não falha de dado — senão ele reenvia
+    // no ato e piora o estouro.
+    if (commentResp.status === 429) {
+      const retryAfter = commentResp.headers?.get?.('Retry-After');
+      if (retryAfter) res.setHeader('Retry-After', retryAfter);
+      return res.status(429).json({
+        error: 'Limite de requisições do ClickUp atingido. A sinalização NÃO foi registrada. Aguarde alguns segundos e tente novamente.',
+        rateLimited: true,
+        retryAfter: retryAfter || null
+      });
+    }
+
     if (!commentResp.ok) {
       const err = await commentResp.text();
       return res.status(commentResp.status).json({ error: `Erro ao comentar: ${err}` });

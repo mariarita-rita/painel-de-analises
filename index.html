@@ -1611,7 +1611,9 @@ async function openDetailModal(taskId, taskName) {
   }
 
   // Descrição em cache é pintada na hora, e o backend não refaz a chamada dela.
-  // Os comentários continuam sendo buscados sempre, para não servir dado velho.
+  // O cache serve para pintar a descrição na hora, sem o flash de "Carregando".
+  // A chamada acontece de todo jeito: é ela que valida se a tarefa pertence à
+  // lista de análises, então não pode ser pulada por otimização.
   const emCache = descriptionCache.has(taskId);
   if (emCache) {
     renderDescription('ok', descriptionCache.get(taskId));
@@ -1620,21 +1622,29 @@ async function openDetailModal(taskId, taskName) {
   }
 
   try {
-    const res = await fetch(`/api/task-detail?id=${encodeURIComponent(taskId)}${emCache ? '&withDescription=0' : ''}`);
-    const data = await res.json();
+    const res = await fetch(`/api/task-detail?id=${encodeURIComponent(taskId)}`);
+    const data = await res.json().catch(() => ({}));
+
+    // Limite de cota tem mensagem própria: o usuário precisa saber que o dado
+    // não veio por rate limit, e não confundir com "não tem comentário".
+    if (res.status === 429) {
+      const espera = data.retryAfter ? ` Tente de novo em ${data.retryAfter}s.` : '';
+      if (!emCache) renderDescription('error');
+      document.getElementById('detail-body').innerHTML =
+        `<div class="detail-empty">Limite de requisições do ClickUp atingido.${escapeHtml(espera)}</div>`;
+      return;
+    }
+
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
 
     currentDetailComments = data.comments || [];
     currentDetailHistory = data.statusHistory || [];
 
-    if (!emCache) {
-      if (data.description === null || data.description === undefined) {
-        // null = a chamada da descrição falhou no backend, sem derrubar o resto.
-        renderDescription(data.description === null ? 'error' : 'ok', '');
-      } else {
-        descriptionCache.set(taskId, data.description);
-        renderDescription('ok', data.description);
-      }
+    if (data.description === null || data.description === undefined) {
+      renderDescription('error');
+    } else {
+      descriptionCache.set(taskId, data.description);
+      renderDescription('ok', data.description);
     }
 
     renderDetailTab();

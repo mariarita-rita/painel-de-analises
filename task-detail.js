@@ -7,40 +7,64 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
   const API_KEY = process.env.CLICKUP_API_KEY;
-  if (!API_KEY) return res.status(500).json({ error: 'Variáveis de ambiente não configuradas' });
-
-  const { id, withDescription } = req.query;
-  if (!id) return res.status(400).json({ error: 'ID da tarefa obrigatório' });
-
-  // O front manda withDescription=0 quando já tem a descrição em cache da
-  // sessão, para não pagar a chamada de novo.
-  const buscarDescricao = withDescription !== '0';
+  const LIST_ID = process.env.CLICKUP_LIST_ID;
+  if (!API_KEY || !LIST_ID) {
+    return res.status(500).json({ error: 'Variáveis de ambiente não configuradas' });
+  }
 
   try {
-    // Comentários e detalhe da tarefa em paralelo — a descrição é um extra:
-    // se a chamada dela falhar, o endpoint segue entregando os comentários.
+    // req.query no runtime da Vercel é getter lazy: acessar fora do try faz um
+    // corpo/URL malformado derrubar a função inteira em vez de virar 400.
+    const { id } = req.query || {};
+    if (!id) return res.status(400).json({ error: 'ID da tarefa obrigatório' });
+
+    // A tarefa é buscada SEMPRE, não só pela descrição: é ela que diz a qual
+    // lista o id pertence. Sem essa checagem o endpoint serve os comentários de
+    // qualquer tarefa que o token alcance no workspace.
     const [commentsResp, taskResp] = await Promise.all([
-      fetch(`https://api.clickup.com/api/v2/task/${id}/comment`, {
+      fetch(`https://api.clickup.com/api/v2/task/${encodeURIComponent(id)}/comment`, {
         headers: { Authorization: API_KEY }
       }),
-      buscarDescricao
-        ? fetch(`https://api.clickup.com/api/v2/task/${id}?include_markdown_description=true`, {
-            headers: { Authorization: API_KEY }
-          }).catch(() => null)
-        : Promise.resolve('skip')
+      fetch(`https://api.clickup.com/api/v2/task/${encodeURIComponent(id)}?include_markdown_description=true`, {
+        headers: { Authorization: API_KEY }
+      }).catch(() => null)
     ]);
 
-    let description = taskResp === 'skip' ? undefined : null;
-    if (taskResp && taskResp !== 'skip' && taskResp.ok) {
-      try {
-        const taskData = await taskResp.json();
-        description = taskData.markdown_description || taskData.description || taskData.text_content || '';
-      } catch {
-        description = null;
-      }
+    // 429 nunca pode virar "lista vazia": isso é indistinguível de "não tem
+    // comentário" e faz o painel mentir. Devolvemos o 429 com o Retry-After
+    // para o front poder avisar, sem retry automático — reenviar na hora só
+    // agrava o estouro de cota, que é compartilhada com os outros painéis.
+    const limitado = [commentsResp, taskResp].find(r => r && r.status === 429);
+    if (limitado) {
+      const retryAfter = limitado.headers?.get?.('Retry-After');
+      if (retryAfter) res.setHeader('Retry-After', retryAfter);
+      return res.status(429).json({
+        error: 'Limite de requisições do ClickUp atingido. Aguarde alguns segundos e tente novamente.',
+        rateLimited: true,
+        retryAfter: retryAfter || null
+      });
     }
 
-    const commentsData = commentsResp.ok ? await commentsResp.json() : { comments: [] };
+    // Escopo: só tarefas da lista de análises. 404/403 do ClickUp cai aqui
+    // também, porque sem a tarefa não há como provar que ela pertence à lista.
+    let taskData = null;
+    if (taskResp && taskResp.ok) {
+      try { taskData = await taskResp.json(); } catch { taskData = null; }
+    }
+    if (!taskData) {
+      return res.status(502).json({ error: 'Não foi possível validar a tarefa no ClickUp.' });
+    }
+    if (String(taskData.list?.id || '') !== String(LIST_ID)) {
+      return res.status(404).json({ error: 'Tarefa não encontrada nesta lista.' });
+    }
+
+    const description =
+      taskData.markdown_description || taskData.description || taskData.text_content || '';
+
+    if (!commentsResp.ok) {
+      return res.status(502).json({ error: 'Não foi possível carregar os comentários no ClickUp.' });
+    }
+    const commentsData = await commentsResp.json();
     const allComments = commentsData.comments || [];
 
     // Padrões que indicam mudança de status nos comentários de atividade do ClickUp
