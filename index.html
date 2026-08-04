@@ -250,6 +250,14 @@
     color: var(--text);
   }
   .journey-count.zero { color: var(--text-3); font-weight: 400; }
+  .journey-count-total { font-size: 11px; font-weight: 400; color: var(--text-3); }
+
+  .journey-note {
+    font-size: 11px;
+    color: var(--text-3);
+    margin-top: 10px;
+    line-height: 1.35;
+  }
 
   .controls {
     background: var(--surface);
@@ -697,6 +705,7 @@
       <button class="journey-info-btn" onclick="document.getElementById('legend-modal').classList.add('open')" title="Ver legenda">ⓘ</button>
     </div>
     <div class="journey-track" id="journey-track"></div>
+    <div class="journey-note" id="journey-note" style="display:none"></div>
   </div>
 
   <div id="error-area"></div>
@@ -846,34 +855,129 @@ function diasBadge(t) {
   return `<span class="dias-badge ${badgeClass}" title="${title}">${dias}d</span>`;
 }
 
+// Normaliza para comparação: sem acento, sem espaço duplicado, minúsculas.
+// Usada nos DOIS lados da comparação (status do ClickUp e chaves do JOURNEY),
+// para que uma variação de escrita no ClickUp não faça análises desaparecerem
+// da régua sem aviso.
 function normalizeStatus(s) {
-  return (s || '').toLowerCase().trim();
+  return (s || '')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+// Índice normalizado calculado uma única vez fora dos loops. Aceita tanto o nome
+// completo do status no ClickUp (key) quanto a abreviação exibida na régua
+// (label), para que renomear "aguardando cliente" → "Aguard. Cliente" no ClickUp
+// continue caindo na etapa certa.
+const JOURNEY_INDEX = new Map();
+JOURNEY.forEach(j => {
+  JOURNEY_INDEX.set(normalizeStatus(j.key), j.key);
+  JOURNEY_INDEX.set(normalizeStatus(j.label), j.key);
+});
+
+// Conta as tarefas por etapa. Devolve os totais por chave do JOURNEY, o balde
+// "outros" com o que não bateu com nenhuma etapa, e os nomes de status
+// desconhecidos que caíram nesse balde.
+function countByStage(tasks) {
+  const counts = {};
+  JOURNEY.forEach(j => counts[j.key] = 0);
+  let outros = 0;
+  const desconhecidos = new Set();
+
+  (tasks || []).forEach(t => {
+    const key = JOURNEY_INDEX.get(normalizeStatus(t.status));
+    if (key !== undefined) {
+      counts[key]++;
+    } else {
+      outros++;
+      desconhecidos.add(t.status || '(status vazio)');
+    }
+  });
+
+  return { counts, outros, desconhecidos };
+}
+
+function hasActiveFilter() {
+  return !!(
+    document.getElementById('search').value.trim() ||
+    document.getElementById('status-filter').value ||
+    document.getElementById('solicitante-filter').value ||
+    document.getElementById('tag-filter').value
+  );
 }
 
 function renderJourney(tasks) {
-  const counts = {};
-  JOURNEY.forEach(j => counts[j.key] = 0);
-  tasks.forEach(t => {
-    const s = normalizeStatus(t.status);
-    if (counts.hasOwnProperty(s)) counts[s]++;
-  });
+  const { counts, outros, desconhecidos } = countByStage(tasks);
+  const filtrado = hasActiveFilter();
 
-  const track = document.getElementById('journey-track');
-  track.innerHTML = JOURNEY.map(j => {
-    const count = counts[j.key];
+  // Com filtro ativo mostramos "filtrados / total", então precisamos também da
+  // contagem sobre a lista inteira.
+  const geral = filtrado ? countByStage(allTasks) : null;
+
+  const renderStep = (key, label, color, count, total) => {
     let cls = '';
-    if (j.key === 'block') cls = count > 0 ? 'block' : '';
-    else if (j.key === 'interação pendente') cls = count > 0 ? 'pending' : '';
-    else if (count > 0) cls = 'active';
+    if (count > 0) {
+      const k = normalizeStatus(key);
+      if (k === 'block') cls = 'block';
+      else if (k === 'interacao pendente') cls = 'pending';
+      else cls = 'active';
+    }
 
-    const dotColor = count > 0 ? j.color : '#CBD5E1';
-    const labelColor = count > 0 ? j.color : 'var(--text-3)';
-    return `<div class="journey-step">
-      <div class="journey-dot" style="background:${dotColor};${count > 0 ? `box-shadow:0 0 0 3px ${j.color}22` : ''}"></div>
-      <div class="journey-label" style="color:${labelColor}">${j.label}</div>
-      <div class="journey-count ${count === 0 ? 'zero' : ''}">${count}</div>
+    const dotColor = count > 0 ? color : '#CBD5E1';
+    const labelColor = count > 0 ? color : 'var(--text-3)';
+    const valor = total !== null
+      ? `${count} <span class="journey-count-total">/ ${total}</span>`
+      : `${count}`;
+
+    return `<div class="journey-step ${cls}">
+      <div class="journey-dot" style="background:${dotColor};${count > 0 ? `box-shadow:0 0 0 3px ${color}22` : ''}"></div>
+      <div class="journey-label" style="color:${labelColor}">${escapeHtml(label)}</div>
+      <div class="journey-count ${count === 0 ? 'zero' : ''}">${valor}</div>
     </div>`;
-  }).join('');
+  };
+
+  const steps = JOURNEY.map(j =>
+    renderStep(j.key, j.label, j.color, counts[j.key], geral ? geral.counts[j.key] : null)
+  );
+
+  // "Outros" só entra na régua quando existe status fora do fluxo — mas quando
+  // entra, entra sempre com número, para a soma fechar visivelmente.
+  const outrosGeral = geral ? geral.outros : 0;
+  if (outros > 0 || outrosGeral > 0) {
+    steps.push(renderStep('outros', 'Outros', '#64748B', outros, geral ? outrosGeral : null));
+  }
+
+  document.getElementById('journey-track').innerHTML = steps.join('');
+
+  // Nada pode sumir em silêncio: status fora do fluxo viram aviso nomeado.
+  if (desconhecidos.size) {
+    console.warn(
+      `[Trajetória] ${outros} análise(s) com status fora das ${JOURNEY.length} etapas do fluxo, ` +
+      `somadas em "Outros": ${[...desconhecidos].map(s => `"${s}"`).join(', ')}. ` +
+      `Se algum desses status for legítimo, adicione a etapa no JOURNEY.`
+    );
+  }
+
+  // Conferência: a soma das etapas mais "Outros" tem de bater com o que foi contado.
+  const soma = JOURNEY.reduce((acc, j) => acc + counts[j.key], 0) + outros;
+  if (soma !== (tasks || []).length) {
+    console.warn(
+      `[Trajetória] Divergência na contagem: as etapas somam ${soma}, ` +
+      `mas foram recebidas ${(tasks || []).length} análises.`
+    );
+  }
+
+  const note = document.getElementById('journey-note');
+  if (filtrado) {
+    note.textContent = `Contagem considerando os filtros ativos — cada etapa mostra os resultados filtrados e, em seguida, o total carregado (${allTasks.length} análises).`;
+    note.style.display = '';
+  } else {
+    note.textContent = '';
+    note.style.display = 'none';
+  }
 }
 
 // ---- BADGES ----
