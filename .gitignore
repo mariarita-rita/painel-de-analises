@@ -1,0 +1,12 @@
+# Variáveis de ambiente — nunca comitar credenciais
+.env
+.env.*
+!.env.example
+
+# Vercel
+.vercel
+
+# Sistema
+node_modules/
+.DS_Store
+Thumbs.db

@@ -21,10 +21,23 @@ analises-monitor/
 
 | Nome | Valor |
 |------|-------|
-| `CLICKUP_API_KEY` | pk_42926569_SQW3J2N5BH5HFME8QOQEN5JN3HY6AEGR |
+| `CLICKUP_API_KEY` | `pk_xxxxxxxx_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX` |
 | `CLICKUP_LIST_ID` | `901327701998` |
 
 Depois de configurar, clique em **Redeploy**.
+
+> **Nunca comite o valor real da `CLICKUP_API_KEY`.** Este repositório é público.
+> A chave é pessoal, dá acesso de leitura e escrita ao workspace e é compartilhada
+> com outros painéis — se vazar, o estrago não fica restrito a este projeto.
+>
+> Configure o valor apenas em **Vercel → Settings → Environment Variables**, onde
+> ele fica disponível para as funções em `process.env.CLICKUP_API_KEY` sem nunca
+> chegar ao cliente. Para rodar local, use um `.env.local` (já coberto por
+> `.gitignore`) — nunca este README.
+>
+> Se uma chave for exposta, revogue em ClickUp → Settings → Apps → *Regenerate*
+> antes de qualquer outra coisa: remover do arquivo não basta, o valor continua
+> no histórico do git.
 
 ## Sobre as tags de sinalização
 
