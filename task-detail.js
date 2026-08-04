@@ -7,7 +7,10 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
   const API_KEY = process.env.CLICKUP_API_KEY;
-  const LIST_ID = process.env.CLICKUP_LIST_ID;
+  // Normaliza a variável antes de comparar: espaço ou aspas sobrando no painel da
+  // Vercel fariam a checagem de escopo falhar para TODA tarefa, e o efeito visível
+  // seria 404 em todo modal — um jeito silencioso de derrubar a tela inteira.
+  const LIST_ID = (process.env.CLICKUP_LIST_ID || '').trim().replace(/^["']|["']$/g, '');
   if (!API_KEY || !LIST_ID) {
     return res.status(500).json({ error: 'Variáveis de ambiente não configuradas' });
   }
@@ -54,7 +57,16 @@ export default async function handler(req, res) {
     if (!taskData) {
       return res.status(502).json({ error: 'Não foi possível validar a tarefa no ClickUp.' });
     }
-    if (String(taskData.list?.id || '') !== String(LIST_ID)) {
+    // Com o ClickApp "Tasks in Multiple Lists" ativo, a tarefa aparece na lista de
+    // análises mas seu list.id aponta para a lista de origem. Por isso o escopo
+    // aceita list.id OU qualquer entrada de locations[]: checar só list.id
+    // recusaria tarefa legítima e o modal quebraria para ela.
+    const listasDaTarefa = [
+      taskData.list?.id,
+      ...(Array.isArray(taskData.locations) ? taskData.locations.map(l => l?.id) : [])
+    ].filter(Boolean).map(String);
+
+    if (!listasDaTarefa.includes(String(LIST_ID))) {
       return res.status(404).json({ error: 'Tarefa não encontrada nesta lista.' });
     }
 
