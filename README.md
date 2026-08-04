@@ -11,10 +11,11 @@
 
 ```
 analises-monitor/
-├── tasks.js       ← API: busca tarefas + último comentário de cada uma
-├── flag.js        ← API: registra sinalização (comentário + tag) no ClickUp
-├── index.html     ← Frontend completo
-└── vercel.json    ← Roteamento
+├── tasks.js         ← API: busca as tarefas da lista (/api/tasks)
+├── task-detail.js   ← API: comentários, histórico e descrição (/api/task-detail)
+├── flag.js          ← API: registra sinalização — comentário, tag e anexo (/api/flag)
+├── index.html       ← Frontend completo
+└── vercel.json      ← Roteamento
 ```
 
 ## Variáveis de ambiente (Vercel → Settings → Environment Variables)
@@ -47,14 +48,36 @@ As tags usadas são:
 
 Se essas tags ainda não existirem no Space do ClickUp, a primeira vez que alguém sinalizar pode retornar um aviso (o comentário ainda assim é adicionado normalmente). Caso queira, crie essas duas tags manualmente no Space antes de divulgar a funcionalidade, para garantir que apareçam coloridas certinho nos cards.
 
-## Sobre a busca de comentários
+## Consumo de requisições no ClickUp
 
-A API faz uma chamada adicional por tarefa para buscar o último comentário (em lotes de 10 simultâneas, para não estourar o limite de requisições do ClickUp). Em listas muito grandes (200+ tarefas), o carregamento pode demorar alguns segundos a mais — isso é esperado.
+O token é limitado a **100 requisições por minuto** e é **compartilhado com outros
+painéis**, então vale saber o custo de cada operação:
+
+| Operação | Chamadas ao ClickUp |
+|---|---|
+| `GET /api/tasks` (uma carga da tabela) | 1 por página de 100 tarefas — hoje 2 |
+| `GET /api/task-detail` (abrir o modal) | 2 (comentários + descrição) |
+| `GET /api/task-detail` reabrindo na sessão | 1 — a descrição vem do cache do front |
+| `POST /api/flag` | 2, ou 3 quando há anexo |
+
+O `index.html` recarrega a tabela a cada 60 s, e as respostas de `/api/tasks` têm
+`Cache-Control: s-maxage=30`, então vários usuários simultâneos colapsam na mesma
+resposta em cache em vez de multiplicar chamadas.
+
+`tasks.js` **não** busca comentário por tarefa — o último comentário saiu da
+tabela justamente para não gastar uma chamada por linha. Se essa coluna voltar,
+o custo passa a crescer com o número de análises e pode estourar a cota.
 
 ## Mapeamento de campos customizados
 
 Caso os nomes dos campos no ClickUp sejam diferentes, ajuste a função `getField` dentro de `tasks.js`:
 
 - `nucleo` → busca por: "núcleo", "nucleo", "id núcleo", "id nucleo"
-- `cliente` → busca por: "cliente", "solicitante", "empresa", "company"
+- `cliente` → busca por: "cliente", "empresa", "company"
 - `jiraUrl` → busca por: "jira issue url", "jira url", "jira issue", "issue url"
+- `ambiente` → busca por: "ambiente"
+- `urgencia` → busca por: "urgência", "urgencia"
+
+O campo `solicitante` é lido separadamente, por `getPersonField`, porque no
+ClickUp é um campo de pessoa e o valor vem como objeto ou lista de objetos, não
+como texto.
