@@ -1499,6 +1499,11 @@ async function submitFlag() {
   btn.disabled = true;
   btn.textContent = file ? 'Enviando anexo...' : 'Enviando...';
 
+  // Os IDs dos analistas vão do front porque o painel já os tem: buscar a
+  // tarefa no /api/flag custaria uma chamada a mais na cota compartilhada.
+  const tarefa = allTasks.find(t => t.id === currentFlagTaskId);
+  const assigneeIds = ((tarefa && tarefa.assigneesFull) || []).map(a => a.id);
+
   try {
     let res;
     if (file) {
@@ -1507,13 +1512,14 @@ async function submitFlag() {
       formData.append('flagType', flagType);
       formData.append('authorName', author);
       formData.append('note', note);
+      formData.append('assigneeIds', JSON.stringify(assigneeIds));
       formData.append('file', file, file.name);
       res = await fetch('/api/flag', { method: 'POST', body: formData });
     } else {
       res = await fetch('/api/flag', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId: currentFlagTaskId, flagType, authorName: author, note })
+        body: JSON.stringify({ taskId: currentFlagTaskId, flagType, authorName: author, note, assigneeIds })
       });
     }
 
