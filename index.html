@@ -1441,6 +1441,109 @@ function populateUserSelect() {
   updateUserChip();
 }
 
+// ---- MENÇÕES: ESTADO NO NAVEGADOR ----
+// A varredura é incremental, então uma menção encontrada hoje não é reencontrada
+// amanhã — o marcador já passou dela. Por isso o navegador guarda as MENÇÕES,
+// não só as marcas de lido: sem isso uma menção não lida desapareceria ao
+// recarregar a página.
+//
+// A chave inclui o ID da identidade. Duas pessoas na mesma máquina não podem ver
+// o sininho uma da outra, e é justamente o caso comum num painel de uso
+// esporádico, onde "trocar de máquina" é a regra e não a exceção.
+//
+// Preço aceito: trocar de máquina perde as marcas de lido e o histórico local.
+// Nada se perde de forma grave — reidentificar é um clique, e rever uma menção
+// já vista é inofensivo. Guardar isso no servidor exigiria banco, que o painel
+// não tem.
+const MENCOES_PREFIX = 'analises_monitor_mencoes_v1';
+const MENCOES_JANELA_MS = 30 * 24 * 60 * 60 * 1000;  // igual ao piso do /api/mentions
+const MENCOES_MAX = 200;
+
+function mencoesKey() {
+  const id = getUserId();
+  return id == null ? null : `${MENCOES_PREFIX}:${id}`;
+}
+
+function getMencoes() {
+  const k = mencoesKey();
+  if (!k) return { since: 0, itens: [] };
+  try {
+    const raw = localStorage.getItem(k);
+    if (!raw) return { since: 0, itens: [] };
+    const s = JSON.parse(raw);
+    return {
+      since: Number(s?.since) || 0,
+      itens: Array.isArray(s?.itens) ? s.itens : []
+    };
+  } catch (e) {
+    return { since: 0, itens: [] };
+  }
+}
+
+function saveMencoes(store) {
+  const k = mencoesKey();
+  if (!k) return;
+  const corte = Date.now() - MENCOES_JANELA_MS;
+  // Podar fora da janela é seguro: o /api/mentions tem o mesmo piso de 30 dias,
+  // então nada mais antigo pode voltar a aparecer de qualquer forma.
+  const itens = (store.itens || [])
+    .filter(m => m && m.commentId && Number(m.date) > corte)
+    .sort((a, b) => b.date - a.date)
+    .slice(0, MENCOES_MAX);
+  try {
+    localStorage.setItem(k, JSON.stringify({ since: Number(store.since) || 0, itens }));
+  } catch (e) {
+    // Cota do localStorage estourada: preferimos perder histórico a quebrar a tela.
+  }
+}
+
+// Novas menções entram sem duplicar e SEM apagar a marca de lido de quem já
+// estava na lista — a varredura pode devolver o mesmo comentário se o marcador
+// não avançou (429, fila truncada).
+function mergeMencoes(novas) {
+  const store = getMencoes();
+  const porId = new Map(store.itens.map(m => [m.commentId, m]));
+  (novas || []).forEach(m => {
+    if (!m || !m.commentId) return;
+    const existente = porId.get(String(m.commentId));
+    porId.set(String(m.commentId), {
+      taskId: m.taskId,
+      taskName: m.taskName || '',
+      taskUrl: m.taskUrl || '',
+      commentId: String(m.commentId),
+      date: Number(m.date) || 0,
+      author: m.author || '',
+      texto: m.texto || '',
+      lido: existente ? !!existente.lido : false
+    });
+  });
+  store.itens = [...porId.values()];
+  saveMencoes(store);
+  return store;
+}
+
+function setMencoesSince(since) {
+  const store = getMencoes();
+  store.since = Math.max(Number(store.since) || 0, Number(since) || 0);
+  saveMencoes(store);
+}
+
+function mencoesNaoLidas() {
+  return getMencoes().itens.filter(m => !m.lido);
+}
+
+function marcarLida(commentId) {
+  const store = getMencoes();
+  const m = store.itens.find(x => x.commentId === String(commentId));
+  if (m) { m.lido = true; saveMencoes(store); }
+}
+
+function marcarTodasLidas() {
+  const store = getMencoes();
+  store.itens.forEach(m => { m.lido = true; });
+  saveMencoes(store);
+}
+
 // ---- MODAL DE SINALIZAÇÃO ----
 function updateFlagExtras() {
   const selected = document.querySelector('input[name=flag-type]:checked')?.value;
