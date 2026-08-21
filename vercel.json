@@ -4,12 +4,14 @@
     { "src": "tasks.js", "use": "@vercel/node" },
     { "src": "flag.js", "use": "@vercel/node" },
     { "src": "task-detail.js", "use": "@vercel/node" },
+    { "src": "mentions.js", "use": "@vercel/node" },
     { "src": "index.html", "use": "@vercel/static" }
   ],
   "routes": [
     { "src": "/api/tasks", "dest": "/tasks.js" },
     { "src": "/api/flag", "dest": "/flag.js" },
     { "src": "/api/task-detail", "dest": "/task-detail.js" },
+    { "src": "/api/mentions", "dest": "/mentions.js" },
     { "src": "/", "dest": "/index.html" }
   ]
 }

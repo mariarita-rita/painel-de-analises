@@ -101,6 +101,90 @@
     cursor: pointer;
   }
   .user-chip svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .user-chip select {
+    font-size: 12px;
+    font-family: inherit;
+    color: inherit;
+    background: transparent;
+    border: none;
+    padding: 0 16px 0 0;
+    margin: 0;
+    cursor: pointer;
+    outline: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right center;
+    background-size: 12px 12px;
+  }
+  .user-chip select option { color: var(--text); background: var(--surface); }
+  /* Sem identidade escolhida o chip pede ação em vez de parecer preenchido.
+     Borda em --brand, texto em --accent-text: --brand dá 3.48:1 e reprova o AA
+     em texto pequeno, como a própria paleta registra. */
+  .user-chip.unset { border-color: var(--brand); color: var(--accent-text); }
+  .user-chip.unset select { color: var(--accent-text); }
+
+  /* ---- SININHO DE MENÇÕES ---- */
+  .bell-wrap { position: relative; display: flex; align-items: center; }
+  .bell {
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; padding: 0;
+    background: var(--surface-2);
+    border: 0.5px solid var(--border-strong);
+    border-radius: 50%;
+    color: var(--text-2);
+    cursor: pointer;
+  }
+  .bell:hover { border-color: var(--brand); color: var(--accent-text); }
+  .bell svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .bell-badge {
+    position: absolute; top: -4px; right: -4px;
+    min-width: 16px; height: 16px; padding: 0 4px;
+    background: var(--red); color: #fff;
+    font-size: 10px; font-weight: 700; line-height: 16px; text-align: center;
+    border-radius: 8px;
+    border: 1.5px solid var(--surface);
+  }
+  .bell-panel {
+    position: absolute; top: 38px; right: 0; z-index: 60;
+    width: 340px; max-height: 420px;
+    display: flex; flex-direction: column;
+    background: var(--surface);
+    border: 0.5px solid var(--border-strong);
+    border-radius: var(--radius);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+    overflow: hidden;
+  }
+  .bell-panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; padding: 10px 12px;
+    border-bottom: 0.5px solid var(--border);
+    font-size: 12px; font-weight: 600; color: var(--text);
+  }
+  .bell-mark {
+    background: none; border: none; padding: 0;
+    font-size: 11px; font-family: inherit; color: var(--accent-text);
+    cursor: pointer; text-decoration: underline;
+  }
+  .bell-mark[disabled] { color: var(--text-3); cursor: default; text-decoration: none; }
+  .bell-list { overflow-y: auto; }
+  .bell-item {
+    display: block; width: 100%; text-align: left;
+    padding: 10px 12px; border: none; border-bottom: 0.5px solid var(--border);
+    background: var(--accent-bg); font-family: inherit; cursor: pointer;
+  }
+  .bell-item:hover { background: var(--surface-2); }
+  .bell-item.lido { background: var(--surface); }
+  .bell-item-top { display: flex; align-items: baseline; gap: 6px; }
+  .bell-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--brand); flex: 0 0 auto; margin-top: 4px; }
+  .bell-item.lido .bell-dot { background: transparent; }
+  .bell-item-task { font-size: 12px; font-weight: 600; color: var(--text); line-height: 1.35; }
+  .bell-item-meta { font-size: 11px; color: var(--text-3); margin: 3px 0 0 12px; }
+  .bell-item-text { font-size: 11px; color: var(--text-2); margin: 4px 0 0 12px; line-height: 1.4; }
+  .bell-empty { padding: 22px 14px; text-align: center; font-size: 12px; color: var(--text-3); line-height: 1.5; }
+  .bell-foot { padding: 8px 12px; border-top: 0.5px solid var(--border); font-size: 11px; color: var(--text-3); }
+  .bell-foot.aviso { background: var(--warning-bg); color: var(--warning-text); }
 
   .main { max-width: 1280px; margin: 0 auto; padding: 24px 20px; }
 
@@ -727,6 +811,8 @@
   .modal-btn.cancel { background: var(--surface-2); color: var(--text-2); border: 0.5px solid var(--border-strong); }
   .modal-btn.confirm { background: var(--accent); color: white; }
   .modal-btn.confirm:disabled { opacity: 0.5; cursor: not-allowed; }
+  .modal input[type=text][readonly] { opacity: 0.75; cursor: not-allowed; }
+  .modal-hint { font-size: 11px; color: var(--text-3); margin-top: 5px; line-height: 1.4; }
   .modal-feedback { font-size: 12px; margin-top: 10px; padding: 8px 10px; border-radius: var(--radius); display: none; }
   .modal-feedback.show { display: block; }
   .modal-feedback.ok { background: var(--success-bg); color: var(--success-text); }
@@ -750,9 +836,27 @@
   </div>
   <div class="topbar-right">
     <div class="last-update" id="last-update">—</div>
-    <div class="user-chip" id="user-chip" onclick="promptUserName()">
+
+    <div class="bell-wrap" id="bell-wrap">
+      <button class="bell" id="bell-btn" onclick="toggleBell(event)" title="Menções" aria-label="Menções">
+        <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span class="bell-badge" id="bell-badge" hidden>0</span>
+      </button>
+      <div class="bell-panel" id="bell-panel" hidden>
+        <div class="bell-panel-head">
+          <span>Menções</span>
+          <button class="bell-mark" id="bell-mark" onclick="marcarTodasERenderizar()">Marcar todas como lidas</button>
+        </div>
+        <div class="bell-list" id="bell-list"></div>
+        <div class="bell-foot" id="bell-foot" hidden></div>
+      </div>
+    </div>
+
+    <div class="user-chip unset" id="user-chip" title="Quem é você?">
       <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-      <span id="user-chip-name">Identificar-se</span>
+      <select id="user-select" onchange="onUserSelectChange()" aria-label="Quem é você?">
+        <option value="">Identificar-se</option>
+      </select>
     </div>
   </div>
 </header>
@@ -839,8 +943,14 @@
     <h3>Sinalizar tarefa</h3>
     <p class="modal-sub" id="flag-modal-sub">Cliente: —</p>
 
+    <!-- Só leitura: a identidade vem do seletor da barra do topo, que carrega o
+         ID de usuário do ClickUp. Campo digitável aqui reintroduziria justamente
+         o nome sem ID que a perna 0 existe para eliminar. -->
     <label>Seu nome</label>
-    <input type="text" id="flag-author" placeholder="Como devemos te identificar?" />
+    <input type="text" id="flag-author" readonly placeholder="Identifique-se no topo da página" />
+    <div class="modal-hint" id="flag-author-hint" style="display:none">
+      Escolha quem você é no seletor do canto superior direito para poder sinalizar.
+    </div>
 
     <label>Tipo de sinalização</label>
     <div class="flag-options">
@@ -1303,8 +1413,12 @@ async function loadTasks() {
     statusSet = new Set(allTasks.map(t => t.status).filter(Boolean));
     populateStatusFilter();
     populateSolicitanteFilter();
+    populateUserSelect();
     populateTagFilter();
     filterTasks();
+    // Sem await: a tabela não espera o sininho, e um erro nas menções não pode
+    // derrubar a carga das tarefas.
+    varrerMencoes();
     const now = new Date();
     document.getElementById('last-update').textContent = `Atualizado às ${now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
   } catch(e) {
@@ -1321,25 +1435,373 @@ async function loadTasks() {
 }
 
 // ---- IDENTIFICAÇÃO DO USUÁRIO ----
-function getUserName() {
-  return localStorage.getItem('analises_monitor_user') || '';
+// A identidade guarda o ID de usuário do ClickUp, não só o nome. O ID vem de
+// graça no campo `Solicitante` (tipo `users`) de cada tarefa, então a lista do
+// seletor é a mesma que o filtro de solicitantes já monta — sem chamada nova e
+// sem lista para manter à mão.
+const USER_KEY = 'analises_monitor_user_v2';        // {id, nome}
+const USER_KEY_LEGACY = 'analises_monitor_user';    // nome digitado à mão (v1)
+
+function getUser() {
+  try {
+    const raw = localStorage.getItem(USER_KEY);
+    if (!raw) return null;
+    const u = JSON.parse(raw);
+    return (u && u.id != null && u.nome) ? u : null;
+  } catch (e) {
+    return null;
+  }
 }
 
-function setUserName(name) {
-  localStorage.setItem('analises_monitor_user', name);
+function getUserName() { return getUser()?.nome || ''; }
+function getUserId()   { const u = getUser(); return u ? u.id : null; }
+
+function setUser(id, nome) {
+  if (id == null || !nome) return;
+  localStorage.setItem(USER_KEY, JSON.stringify({ id: Number(id), nome }));
+  localStorage.removeItem(USER_KEY_LEGACY);
+  updateUserChip();
+}
+
+function clearUser() {
+  localStorage.removeItem(USER_KEY);
   updateUserChip();
 }
 
 function updateUserChip() {
-  const name = getUserName();
-  document.getElementById('user-chip-name').textContent = name || 'Identificar-se';
+  const u = getUser();
+  const sel = document.getElementById('user-select');
+  const chip = document.getElementById('user-chip');
+  if (sel) sel.value = u ? String(u.id) : '';
+  if (chip) chip.classList.toggle('unset', !u);
 }
 
-function promptUserName() {
-  const current = getUserName();
-  const name = prompt('Como devemos te identificar nas sinalizações?', current || '');
-  if (name && name.trim()) setUserName(name.trim());
+function onUserSelectChange() {
+  const sel = document.getElementById('user-select');
+  const id = sel.value;
+  if (!id) {
+    clearUser();
+  } else {
+    setUser(id, sel.options[sel.selectedIndex].textContent);
+  }
+  // O sininho é por identidade (a chave do localStorage inclui o ID), então
+  // trocar de pessoa troca de caixa de menções — e a nova precisa ser varrida.
+  mencoesAviso = null;
+  atualizarSininho();
+  if (!document.getElementById('bell-panel').hidden) renderBell();
+  varrerMencoes();
 }
+
+// Monta o seletor a partir dos solicitantes das tarefas carregadas. A identidade
+// já salva entra na lista mesmo que a pessoa não seja solicitante de nenhuma
+// tarefa no momento — senão ela se perderia sozinha quando as tarefas dela
+// saíssem da lista.
+function populateUserSelect() {
+  const sel = document.getElementById('user-select');
+  if (!sel) return;
+  const byId = new Map();
+  allTasks.forEach(t => (t.solicitantes || []).forEach(p => {
+    if (p && p.id != null && p.nome) byId.set(String(p.id), p.nome);
+  }));
+
+  const saved = getUser();
+  if (saved && !byId.has(String(saved.id))) byId.set(String(saved.id), saved.nome);
+
+  // Migração da v1: o valor antigo é texto livre, sem ID. Só dá para aproveitar
+  // se casar exatamente com alguém da lista — e não casar é o resultado
+  // esperado numa parcela dos casos ("Aline Costa" não existe no workspace).
+  // Nesses, a pessoa se identifica uma vez e o problema não volta.
+  if (!saved) {
+    const legacy = (localStorage.getItem(USER_KEY_LEGACY) || '').trim();
+    if (legacy) {
+      const alvo = legacy.toLowerCase();
+      const achado = [...byId.entries()].find(([, nome]) => nome.toLowerCase() === alvo);
+      if (achado) setUser(achado[0], achado[1]);
+    }
+  }
+
+  sel.innerHTML = '<option value="">Identificar-se</option>';
+  [...byId.entries()]
+    .sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'))
+    .forEach(([id, nome]) => {
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = nome;
+      sel.appendChild(opt);
+    });
+
+  updateUserChip();
+}
+
+// ---- MENÇÕES: ESTADO NO NAVEGADOR ----
+// A varredura é incremental, então uma menção encontrada hoje não é reencontrada
+// amanhã — o marcador já passou dela. Por isso o navegador guarda as MENÇÕES,
+// não só as marcas de lido: sem isso uma menção não lida desapareceria ao
+// recarregar a página.
+//
+// A chave inclui o ID da identidade. Duas pessoas na mesma máquina não podem ver
+// o sininho uma da outra, e é justamente o caso comum num painel de uso
+// esporádico, onde "trocar de máquina" é a regra e não a exceção.
+//
+// Preço aceito: trocar de máquina perde as marcas de lido e o histórico local.
+// Nada se perde de forma grave — reidentificar é um clique, e rever uma menção
+// já vista é inofensivo. Guardar isso no servidor exigiria banco, que o painel
+// não tem.
+const MENCOES_PREFIX = 'analises_monitor_mencoes_v1';
+const MENCOES_JANELA_MS = 30 * 24 * 60 * 60 * 1000;  // igual ao piso do /api/mentions
+const MENCOES_MAX = 200;
+
+function mencoesKey() {
+  const id = getUserId();
+  return id == null ? null : `${MENCOES_PREFIX}:${id}`;
+}
+
+function getMencoes() {
+  const k = mencoesKey();
+  if (!k) return { since: 0, itens: [] };
+  try {
+    const raw = localStorage.getItem(k);
+    if (!raw) return { since: 0, itens: [] };
+    const s = JSON.parse(raw);
+    return {
+      since: Number(s?.since) || 0,
+      itens: Array.isArray(s?.itens) ? s.itens : []
+    };
+  } catch (e) {
+    return { since: 0, itens: [] };
+  }
+}
+
+function saveMencoes(store) {
+  const k = mencoesKey();
+  if (!k) return;
+  const corte = Date.now() - MENCOES_JANELA_MS;
+  // Podar fora da janela é seguro: o /api/mentions tem o mesmo piso de 30 dias,
+  // então nada mais antigo pode voltar a aparecer de qualquer forma.
+  const itens = (store.itens || [])
+    .filter(m => m && m.commentId && Number(m.date) > corte)
+    .sort((a, b) => b.date - a.date)
+    .slice(0, MENCOES_MAX);
+  try {
+    localStorage.setItem(k, JSON.stringify({ since: Number(store.since) || 0, itens }));
+  } catch (e) {
+    // Cota do localStorage estourada: preferimos perder histórico a quebrar a tela.
+  }
+}
+
+// Novas menções entram sem duplicar e SEM apagar a marca de lido de quem já
+// estava na lista — a varredura pode devolver o mesmo comentário se o marcador
+// não avançou (429, fila truncada).
+function mergeMencoes(novas) {
+  const store = getMencoes();
+  const porId = new Map(store.itens.map(m => [m.commentId, m]));
+  (novas || []).forEach(m => {
+    if (!m || !m.commentId) return;
+    const existente = porId.get(String(m.commentId));
+    porId.set(String(m.commentId), {
+      taskId: m.taskId,
+      taskName: m.taskName || '',
+      taskUrl: m.taskUrl || '',
+      commentId: String(m.commentId),
+      date: Number(m.date) || 0,
+      author: m.author || '',
+      texto: m.texto || '',
+      lido: existente ? !!existente.lido : false
+    });
+  });
+  store.itens = [...porId.values()];
+  saveMencoes(store);
+  return store;
+}
+
+function setMencoesSince(since) {
+  const store = getMencoes();
+  store.since = Math.max(Number(store.since) || 0, Number(since) || 0);
+  saveMencoes(store);
+}
+
+function mencoesNaoLidas() {
+  return getMencoes().itens.filter(m => !m.lido);
+}
+
+function marcarLida(commentId) {
+  const store = getMencoes();
+  const m = store.itens.find(x => x.commentId === String(commentId));
+  if (m) { m.lido = true; saveMencoes(store); }
+}
+
+function marcarTodasLidas() {
+  const store = getMencoes();
+  store.itens.forEach(m => { m.lido = true; });
+  saveMencoes(store);
+}
+
+// ---- SININHO ----
+let mencoesVarrendo = false;
+let mencoesAviso = null;
+
+function tempoRelativo(ms) {
+  const d = Date.now() - Number(ms || 0);
+  const min = Math.floor(d / 60000);
+  if (min < 1) return 'agora';
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h} h`;
+  const dias = Math.floor(h / 24);
+  if (dias < 30) return `${dias} d`;
+  return new Date(Number(ms)).toLocaleDateString('pt-BR');
+}
+
+// Chamada a cada recarga da tabela, mas só gasta requisição quando há motivo:
+// o front já tem o date_updated de todas as tarefas, então compara o maior deles
+// com o marcador guardado. Nada mudou nos últimos 60 s => nenhuma chamada.
+async function varrerMencoes() {
+  if (mencoesVarrendo) return;
+  const userId = getUserId();
+  if (userId == null) { atualizarSininho(); return; }
+
+  const maiorUpdate = allTasks.reduce((max, t) => Math.max(max, Number(t.date_updated) || 0), 0);
+  if (!maiorUpdate) { atualizarSininho(); return; }
+
+  const store = getMencoes();
+
+  // Primeiro acesso desta identidade: o marcador nasce no presente e o sininho
+  // nasce vazio, de propósito. Varrer o passado custaria as 269 chamadas que
+  // esta perna existe para evitar, e encheria o sininho de menções velhas já
+  // resolvidas.
+  if (!store.since) {
+    setMencoesSince(maiorUpdate);
+    atualizarSininho();
+    return;
+  }
+
+  if (maiorUpdate <= store.since) { atualizarSininho(); return; }
+
+  mencoesVarrendo = true;
+  try {
+    const res = await fetch(`/api/mentions?userId=${encodeURIComponent(userId)}&since=${encodeURIComponent(store.since)}`);
+    const data = await res.json().catch(() => ({}));
+
+    if (res.status === 429) {
+      // Não avança o marcador: perder a janela faria a menção nunca aparecer.
+      mencoesAviso = 'Cota do ClickUp atingida. As menções serão buscadas de novo em instantes.';
+      return;
+    }
+    if (!res.ok) {
+      mencoesAviso = data.error ? `Erro ao buscar menções: ${data.error}` : 'Erro ao buscar menções.';
+      return;
+    }
+
+    if (Array.isArray(data.mentions) && data.mentions.length) mergeMencoes(data.mentions);
+    if (data.nextSince) setMencoesSince(data.nextSince);
+
+    // Fila truncada não precisa de laço aqui: o marcador ficou atrás do
+    // maiorUpdate, então o próximo ciclo de 60 s continua sozinho. Assim o custo
+    // se espalha no tempo em vez de estourar a cota numa tacada.
+    if (data.blocosVistos === false) {
+      mencoesAviso = 'Os comentários lidos não trouxeram menção estruturada — o sininho pode não estar reconhecendo menções.';
+    } else if (data.rateLimited) {
+      mencoesAviso = 'Cota do ClickUp atingida no meio da busca. O resto vem na próxima atualização.';
+    } else {
+      mencoesAviso = null;
+    }
+  } catch (e) {
+    mencoesAviso = `Erro ao buscar menções: ${e.message}`;
+  } finally {
+    mencoesVarrendo = false;
+    atualizarSininho();
+    if (!document.getElementById('bell-panel').hidden) renderBell();
+  }
+}
+
+function atualizarSininho() {
+  const n = getUserId() == null ? 0 : mencoesNaoLidas().length;
+  const badge = document.getElementById('bell-badge');
+  if (!badge) return;
+  badge.textContent = n > 9 ? '9+' : String(n);
+  badge.hidden = n === 0;
+  document.getElementById('bell-btn').title = n
+    ? `${n} menção${n > 1 ? 'ões' : ''} não lida${n > 1 ? 's' : ''}`
+    : 'Menções';
+}
+
+function renderBell() {
+  const lista = document.getElementById('bell-list');
+  const foot = document.getElementById('bell-foot');
+  const marcar = document.getElementById('bell-mark');
+  const store = getMencoes();
+  const itens = [...store.itens].sort((a, b) => b.date - a.date);
+  const naoLidas = itens.filter(m => !m.lido).length;
+
+  marcar.disabled = naoLidas === 0;
+
+  if (getUserId() == null) {
+    lista.innerHTML = '<div class="bell-empty">Escolha quem você é no seletor ao lado para ver suas menções.</div>';
+  } else if (!itens.length) {
+    lista.innerHTML = '<div class="bell-empty">Nenhuma menção por aqui.<br>Você aparece aqui quando alguém te mencionar num comentário de análise.</div>';
+  } else {
+    // data-cid + delegação em vez de onclick com o id interpolado: o commentId
+    // vem da API, e interpolar dado externo dentro de atributo de evento é
+    // injeção esperando acontecer.
+    lista.innerHTML = itens.map(m => `
+      <button class="bell-item ${m.lido ? 'lido' : ''}" data-cid="${escapeHtml(m.commentId)}">
+        <div class="bell-item-top">
+          <span class="bell-dot"></span>
+          <span class="bell-item-task">${escapeHtml(m.taskName || m.taskId)}</span>
+        </div>
+        <div class="bell-item-meta">${escapeHtml(m.author)} · ${tempoRelativo(m.date)}</div>
+        ${m.texto ? `<div class="bell-item-text">${escapeHtml(m.texto)}</div>` : ''}
+      </button>`).join('');
+  }
+
+  if (mencoesAviso) {
+    foot.textContent = mencoesAviso;
+    foot.className = 'bell-foot aviso';
+    foot.hidden = false;
+  } else {
+    foot.hidden = true;
+  }
+}
+
+function abrirMencao(commentId) {
+  const m = getMencoes().itens.find(x => x.commentId === String(commentId));
+  if (!m) return;
+  marcarLida(commentId);
+  atualizarSininho();
+  renderBell();
+  if (m.taskUrl) window.open(m.taskUrl, '_blank', 'noopener');
+}
+
+function marcarTodasERenderizar() {
+  marcarTodasLidas();
+  atualizarSininho();
+  renderBell();
+}
+
+function toggleBell(ev) {
+  if (ev) ev.stopPropagation();
+  const painel = document.getElementById('bell-panel');
+  const abrir = painel.hidden;
+  painel.hidden = !abrir;
+  if (abrir) renderBell();
+}
+
+document.getElementById('bell-list').addEventListener('click', (ev) => {
+  const alvo = ev.target.closest('.bell-item');
+  if (alvo && alvo.dataset.cid) abrirMencao(alvo.dataset.cid);
+});
+
+// Fecha ao clicar fora ou no Esc — o painel é sobreposto e ficaria pendurado.
+document.addEventListener('click', (ev) => {
+  const wrap = document.getElementById('bell-wrap');
+  const painel = document.getElementById('bell-panel');
+  if (painel && !painel.hidden && wrap && !wrap.contains(ev.target)) painel.hidden = true;
+});
+document.addEventListener('keydown', (ev) => {
+  if (ev.key !== 'Escape') return;
+  const painel = document.getElementById('bell-panel');
+  if (painel) painel.hidden = true;
+});
 
 // ---- MODAL DE SINALIZAÇÃO ----
 function updateFlagExtras() {
@@ -1353,14 +1815,16 @@ function openFlagModal(taskId, taskName) {
   currentFlagTaskId = taskId;
   currentFlagTaskName = taskName;
   document.getElementById('flag-modal-sub').textContent = `Cliente: ${taskName}`;
-  document.getElementById('flag-author').value = getUserName();
+  const u = getUser();
+  document.getElementById('flag-author').value = u ? u.nome : '';
+  document.getElementById('flag-author-hint').style.display = u ? 'none' : 'block';
   document.querySelectorAll('input[name=flag-type]').forEach(r => r.checked = false);
   document.getElementById('flag-note').value = '';
   document.getElementById('flag-file').value = '';
   document.getElementById('flag-extras').style.display = 'none';
   document.getElementById('flag-feedback').className = 'modal-feedback';
   document.getElementById('flag-feedback').textContent = '';
-  document.getElementById('flag-confirm-btn').disabled = false;
+  document.getElementById('flag-confirm-btn').disabled = !u;
   document.getElementById('flag-confirm-btn').textContent = 'Sinalizar';
   document.getElementById('flag-modal').classList.add('open');
 }
@@ -1371,7 +1835,8 @@ function closeFlagModal() {
 }
 
 async function submitFlag() {
-  const author = document.getElementById('flag-author').value.trim();
+  const user = getUser();
+  const author = user ? user.nome : '';
   const flagType = document.querySelector('input[name=flag-type]:checked')?.value;
   const note = document.getElementById('flag-note').value.trim();
   const fileInput = document.getElementById('flag-file');
@@ -1384,7 +1849,7 @@ async function submitFlag() {
 
   if (!author) {
     feedback.className = 'modal-feedback show err';
-    feedback.textContent = 'Informe seu nome para continuar.';
+    feedback.textContent = 'Escolha quem você é no seletor do canto superior direito para continuar.';
     return;
   }
   if (!flagType) {
@@ -1393,9 +1858,13 @@ async function submitFlag() {
     return;
   }
 
-  setUserName(author);
   btn.disabled = true;
   btn.textContent = file ? 'Enviando anexo...' : 'Enviando...';
+
+  // Os IDs dos analistas vão do front porque o painel já os tem: buscar a
+  // tarefa no /api/flag custaria uma chamada a mais na cota compartilhada.
+  const tarefa = allTasks.find(t => t.id === currentFlagTaskId);
+  const assigneeIds = ((tarefa && tarefa.assigneesFull) || []).map(a => a.id);
 
   try {
     let res;
@@ -1405,13 +1874,14 @@ async function submitFlag() {
       formData.append('flagType', flagType);
       formData.append('authorName', author);
       formData.append('note', note);
+      formData.append('assigneeIds', JSON.stringify(assigneeIds));
       formData.append('file', file, file.name);
       res = await fetch('/api/flag', { method: 'POST', body: formData });
     } else {
       res = await fetch('/api/flag', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId: currentFlagTaskId, flagType, authorName: author, note })
+        body: JSON.stringify({ taskId: currentFlagTaskId, flagType, authorName: author, note, assigneeIds })
       });
     }
 
@@ -1436,6 +1906,7 @@ document.getElementById('flag-modal').addEventListener('click', (e) => {
 });
 
 updateUserChip();
+atualizarSininho();
 loadTasks();
 setInterval(loadTasks, 60000);
 </script>

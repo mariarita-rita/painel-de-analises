@@ -13,6 +13,32 @@ function readRawBody(req) {
   });
 }
 
+// Os IDs chegam do front (t.assigneesFull), não de uma leitura da tarefa aqui:
+// buscar a tarefa custaria uma chamada a mais numa cota de 100/min compartilhada
+// com o dashboard de carteiras e o Apps Script. O preço é que o dado pode estar
+// até 60 s velho (o intervalo de recarga do painel), então uma troca de
+// responsável nesse intervalo mencionaria o anterior. Aceitável: o assignee
+// atual é notificado pelo ClickUp de qualquer forma, por ser assignee.
+function normalizarIds(bruto) {
+  let arr = [];
+  if (Array.isArray(bruto)) {
+    arr = bruto;
+  } else if (typeof bruto === 'string' && bruto.trim()) {
+    try {
+      const parsed = JSON.parse(bruto);
+      arr = Array.isArray(parsed) ? parsed : [parsed];
+    } catch (e) {
+      arr = bruto.split(',');
+    }
+  }
+  const out = [];
+  for (const v of arr) {
+    const n = Number(v && typeof v === 'object' ? v.id : v);
+    if (Number.isInteger(n) && n > 0 && !out.includes(n)) out.push(n);
+  }
+  return out;
+}
+
 // Parser simples de multipart/form-data (sem dependências externas)
 function extractParts(buffer, boundary) {
   const boundaryBuf = Buffer.from(`--${boundary}`);
@@ -62,7 +88,7 @@ export default async function handler(req, res) {
 
   const contentType = req.headers['content-type'] || '';
 
-  let taskId, flagType, authorName, note, file;
+  let taskId, flagType, authorName, note, file, assigneeIdsRaw;
 
   try {
     if (contentType.includes('multipart/form-data')) {
@@ -79,11 +105,13 @@ export default async function handler(req, res) {
         else if (part.name === 'flagType') flagType = part.data.toString('utf8');
         else if (part.name === 'authorName') authorName = part.data.toString('utf8');
         else if (part.name === 'note') note = part.data.toString('utf8');
+        else if (part.name === 'assigneeIds') assigneeIdsRaw = part.data.toString('utf8');
       }
     } else {
       const buffer = await readRawBody(req);
       const body = JSON.parse(buffer.toString('utf8') || '{}');
       taskId = body.taskId; flagType = body.flagType; authorName = body.authorName; note = body.note;
+      assigneeIdsRaw = body.assigneeIds;
     }
   } catch (e) {
     return res.status(400).json({ error: `Erro ao processar requisição: ${e.message}` });
@@ -121,10 +149,37 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'flagType inválido' });
   }
 
+  const assigneeIds = normalizarIds(assigneeIdsRaw);
+
   try {
-    let commentText = `${config.emoji} **${config.label}** — sinalizado por ${authorName} via Painel de Monitoramento, em ${new Date().toLocaleString('pt-BR')}.`;
+    // Array de blocos, não `comment_text`. É a única forma de gerar menção
+    // estruturada ({type:'tag', user:{id}}), que é o que faz a notificação
+    // chegar a uma pessoa específica e o que o sininho consegue reconhecer
+    // depois. O parâmetro `comment` não consta no schema do endpoint, só na
+    // página de Comment formatting — verificado na API real antes de usar:
+    // o bloco tag sobrevive e renderiza como menção.
+    //
+    // Como blocos não interpretam Markdown, o negrito do rótulo vem de
+    // attributes.bold — `**texto**` sairia literal.
+    const comment = [
+      { text: `${config.emoji} ` },
+      { text: config.label, attributes: { bold: true } },
+      { text: ` — sinalizado por ${authorName} via Painel de Monitoramento, em ${new Date().toLocaleString('pt-BR')}.` }
+    ];
+
+    // Menciona o ANALISTA (assignee da tarefa), não quem sinalizou: mencionar
+    // quem acabou de agir é recibo, não notificação. Quem precisa saber é quem
+    // tem de agir. Todos os assignees, porque há tarefas com dois.
+    if (assigneeIds.length) {
+      comment.push({ text: '\n\n' });
+      assigneeIds.forEach((id, i) => {
+        if (i > 0) comment.push({ text: ' ' });
+        comment.push({ type: 'tag', user: { id } });
+      });
+    }
+
     if (note && note.trim()) {
-      commentText += `\n\nNota: ${note.trim()}`;
+      comment.push({ text: `\n\nNota: ${note.trim()}` });
     }
 
     const commentResp = await fetch(`https://api.clickup.com/api/v2/task/${taskId}/comment`, {
@@ -133,7 +188,12 @@ export default async function handler(req, res) {
         Authorization: API_KEY,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ comment_text: commentText, notify_all: true })
+      // notify_all: false, e não omitido — o schema marca o campo como
+      // obrigatório, e explícito evita depender do default. Estava `true`, que
+      // notificava o dono do token (quem sinaliza não é o dono do token) e não
+      // acrescentava nada: assignees e watchers são notificados de qualquer
+      // forma, independente deste campo.
+      body: JSON.stringify({ comment, notify_all: false })
     });
 
     // 429 antes do erro genérico: a sinalização não foi registrada, e o usuário
@@ -194,7 +254,18 @@ export default async function handler(req, res) {
       }
     }
 
-    const warnings = [tagWarning, attachWarning].filter(Boolean);
+    // Tarefa sem responsável: não menciona ninguém, e avisa. Cair num ID
+    // padrão foi descartado — ID fixo estaria errado na maioria dos casos
+    // (o assignee varia entre pelo menos quatro pessoas), e mencionar a pessoa
+    // errada ensina todo mundo a ignorar menção, o que é pior que não mencionar.
+    // A sinalização não se perde: comentário e etiqueta são aplicados, e uma
+    // análise sinalizada sem responsável é ela mesma uma condição que alguém
+    // precisa ver — por isso vira aviso na tela de quem sinalizou.
+    const mencaoWarning = assigneeIds.length
+      ? null
+      : 'Sinalização registrada, mas ninguém foi mencionado: esta análise não tem responsável no ClickUp.';
+
+    const warnings = [mencaoWarning, tagWarning, attachWarning].filter(Boolean);
 
     return res.status(200).json({
       success: true,

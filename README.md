@@ -5,7 +5,38 @@
 - **Régua de trajetória** mostrando quantas tarefas estão em cada etapa do fluxo (Novo Pedido → Finalizado)
 - **Novos campos na tabela**: link direto para o ClickUp, último comentário da tarefa, autor e data do comentário
 - **Sinalização de tarefas**: botão 🚩 em cada linha permite que CSMs/atendimento marquem "Cliente pede retorno" ou "Risco de churn" — isso adiciona automaticamente um **comentário** e uma **tag nativa** na tarefa do ClickUp
-- **Identificação do usuário**: nome salvo no navegador (localStorage), usado para assinar as sinalizações
+- **Identificação do usuário**: seletor na barra do topo, salvo no navegador
+  (localStorage), usado para assinar as sinalizações
+
+## Identificação: por que ela guarda o ID, e não só o nome
+
+A chave `analises_monitor_user_v2` guarda `{id, nome}` — o `id` é o **ID de usuário
+do ClickUp**. A versão anterior (`analises_monitor_user`) guardava só o nome, digitado
+à mão num `prompt()`, e isso não sobrevive ao uso: dos quatro nomes que chegaram a ser
+digitados em sinalizações reais, três casavam com um usuário do workspace e um não
+("Aline Costa" — o workspace tem *Aline Rosa*). Nome digitado não serve para
+identificar pessoa com segurança.
+
+O ID **não precisa de mapa nem de chamada nova**: o campo `Solicitante` do ClickUp é
+do tipo `users` e já devolve `{id, username, email}` em toda tarefa que o
+`/api/tasks` carrega. O `tasks.js` passa isso adiante em `t.solicitantes`
+(`[{id, nome}]`), e o seletor é montado dessa mesma lista — a mesma que alimenta o
+filtro de solicitantes.
+
+Também **não** use `GET /team/{id}/member` como fonte de IDs: ele não devolve todos os
+usuários que aparecem nas tarefas (`Matheus Delamason da Silva`, `43078993`, é
+assignee de dezenas de análises e não consta na lista de membros). A fonte é o payload
+da tarefa.
+
+O `t.assigneesFull` (`[{id, nome}]`) existe pelo mesmo motivo, para quando a
+sinalização passar a mencionar o analista: **o assignee varia por tarefa** — Lucas
+Santos (`82010227`), Matheus Delamason da Silva (`43078993`), Cassia Silva
+(`42921071`), Maria Rita (`42926569`) — e algumas tarefas têm dois. ID fixo estaria
+errado na maioria dos casos.
+
+Migração da v1: se houver valor antigo e ele casar exatamente com um nome da lista, a
+identidade é convertida sozinha. Não casando, a pessoa se identifica uma vez no
+seletor e não é perguntada de novo.
 
 ## Estrutura (arquivos na raiz)
 
@@ -23,7 +54,7 @@ analises-monitor/
 | Nome | Valor |
 |------|-------|
 | `CLICKUP_API_KEY` | `pk_xxxxxxxx_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX` |
-| `CLICKUP_LIST_ID` | `901327701998` |
+| `CLICKUP_LIST_ID` | `901326473282` (lista `🚨 Análises - ISSUE`, space `49108550`) |
 
 Depois de configurar, clique em **Redeploy**.
 
@@ -55,10 +86,12 @@ painéis**, então vale saber o custo de cada operação:
 
 | Operação | Chamadas ao ClickUp |
 |---|---|
-| `GET /api/tasks` (uma carga da tabela) | 1 por página de 100 tarefas — hoje 2 |
+| `GET /api/tasks` (uma carga da tabela) | 1 por página de 100 tarefas — hoje 3 (269 análises) |
 | `GET /api/task-detail` (abrir o modal) | 2 (comentários + descrição) |
 | `GET /api/task-detail` reabrindo na sessão | 1 — a descrição vem do cache do front |
 | `POST /api/flag` | 2, ou 3 quando há anexo |
+| `GET /api/mentions`, nada mudou | **0** — o front nem chama |
+| `GET /api/mentions`, algo mudou | 1 (lista) + 1 por tarefa alterada, teto de 40 |
 
 O `index.html` recarrega a tabela a cada 60 s, e as respostas de `/api/tasks` têm
 `Cache-Control: s-maxage=30`, então vários usuários simultâneos colapsam na mesma
@@ -67,6 +100,70 @@ resposta em cache em vez de multiplicar chamadas.
 `tasks.js` **não** busca comentário por tarefa — o último comentário saiu da
 tabela justamente para não gastar uma chamada por linha. Se essa coluna voltar,
 o custo passa a crescer com o número de análises e pode estourar a cota.
+
+## Sininho de menções
+
+Os solicitantes têm usuário no ClickUp mas não o usam no dia a dia, então não veem as
+menções. O sininho traz as menções para dentro do painel.
+
+**Como a menção nasce.** A sinalização (`/api/flag`) menciona o **assignee da tarefa**,
+lido de `t.assigneesFull` — nunca ID fixo, porque o responsável varia por tarefa e
+algumas têm dois. Mencionar quem sinalizou seria recibo, não notificação. As respostas
+da analista continuam vindo do ClickUp, com `@` normal.
+
+O corpo do comentário usa o array de blocos, não `comment_text`, porque só assim dá
+para emitir `{"type":"tag","user":{"id":N}}`. Esse parâmetro **não está no schema** do
+`POST /task/{id}/comment`, só na página *Comment formatting* — foi verificado contra a
+API real (o bloco sobrevive e renderiza como menção) antes de virar código. Blocos não
+interpretam Markdown: negrito vem de `attributes.bold`, `**texto**` sairia literal.
+
+**Como a menção é encontrada.** Não há endpoint de notificações na API do ClickUp — o
+pedido foi encerrado como *"Not on the roadmap"* em 29/08/2025. Varrer as 269 análises
+custaria 269 chamadas, o que não cabe na cota. Então `/api/mentions` faz varredura
+incremental, e funciona porque **postar comentário carimba o `date_updated` da
+tarefa** (verificado: na tarefa `86ak23wf0` o comentário é de `1787173573464` e o
+`date_updated` `1787173573807`).
+
+O front tem o `date_updated` de tudo, então compara o maior deles com o marcador
+guardado e **só chama a rota quando algo mudou**. Em regime, custo zero.
+
+A rota consulta a lista com `date_updated_gt` em vez de aceitar IDs do front: uma
+chamada resolve o que mudou **e** o escopo de lista — o `task-detail.js` gasta uma
+chamada extra por tarefa para fechar o mesmo furo.
+
+Limites deliberados:
+
+| o quê | valor | por quê |
+|---|---|---|
+| piso do `since` | 30 dias | sem piso, quem abre depois de muito tempo pede a varredura do período inteiro — o caminho de volta às 269 chamadas, por acidente |
+| teto por chamada | 40 tarefas | processadas da **mais antiga** para a mais nova, devolvendo `nextSince`; o marcador avança monotonicamente e nada é pulado |
+| `Cache-Control` | `no-store` | o `s-maxage` do `/api/tasks` existe para os CSMs colapsarem na mesma resposta; numa rota por usuário isso entregaria o sininho de uma pessoa para outra |
+| fila truncada | sem laço | o próximo ciclo de 60 s continua sozinho, espalhando o custo em vez de estourar a cota numa tacada |
+
+`429` nunca vira lista vazia — seria indistinguível de "ninguém te mencionou" e faria o
+sininho mentir. A rota interrompe, devolve o que tem e **não** avança o marcador.
+
+`blocosVistos: false` é diagnóstico: comentários foram lidos e nenhum trouxe array de
+blocos, ou seja a leitura não preserva a menção estruturada e o sininho ficaria vazio
+para sempre. Aparece como aviso no pé do painel em vez de falhar em silêncio.
+
+**Visto / não visto.** Fica no navegador, em
+`analises_monitor_mencoes_v1:<userId>` — a chave inclui o ID porque duas pessoas na
+mesma máquina não podem ver o sininho uma da outra, e num painel de uso esporádico
+compartilhar máquina é a regra.
+
+Guarda as **menções**, não só as marcas de lido: a varredura é incremental, então uma
+menção encontrada hoje não é reencontrada amanhã e desapareceria ao recarregar. Poda
+de 30 dias (igual ao piso da rota, então nada mais antigo pode voltar) e teto de 200
+itens.
+
+Trocar de máquina perde as marcas de lido e o histórico local. Aceito: reidentificar é
+um clique e rever menção já vista é inofensivo. Guardar no servidor exigiria banco, que
+o painel não tem.
+
+**O sininho nasce vazio.** No primeiro acesso de cada identidade o marcador nasce no
+presente e nada é varrido do passado — não há backfill, e a varredura incremental basta
+desde o primeiro dia.
 
 ## Mapeamento de campos customizados
 
