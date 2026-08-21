@@ -101,6 +101,26 @@
     cursor: pointer;
   }
   .user-chip svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .user-chip select {
+    font-size: 12px;
+    font-family: inherit;
+    color: inherit;
+    background: transparent;
+    border: none;
+    padding: 0 16px 0 0;
+    margin: 0;
+    cursor: pointer;
+    outline: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right center;
+    background-size: 12px 12px;
+  }
+  .user-chip select option { color: var(--text); background: var(--surface); }
+  /* Sem identidade escolhida o chip pede ação em vez de parecer preenchido. */
+  .user-chip.unset { border-color: var(--brand); color: var(--brand); }
+  .user-chip.unset select { color: var(--brand); }
 
   .main { max-width: 1280px; margin: 0 auto; padding: 24px 20px; }
 
@@ -727,6 +747,8 @@
   .modal-btn.cancel { background: var(--surface-2); color: var(--text-2); border: 0.5px solid var(--border-strong); }
   .modal-btn.confirm { background: var(--accent); color: white; }
   .modal-btn.confirm:disabled { opacity: 0.5; cursor: not-allowed; }
+  .modal input[type=text][readonly] { opacity: 0.75; cursor: not-allowed; }
+  .modal-hint { font-size: 11px; color: var(--text-3); margin-top: 5px; line-height: 1.4; }
   .modal-feedback { font-size: 12px; margin-top: 10px; padding: 8px 10px; border-radius: var(--radius); display: none; }
   .modal-feedback.show { display: block; }
   .modal-feedback.ok { background: var(--success-bg); color: var(--success-text); }
@@ -750,9 +772,11 @@
   </div>
   <div class="topbar-right">
     <div class="last-update" id="last-update">—</div>
-    <div class="user-chip" id="user-chip" onclick="promptUserName()">
+    <div class="user-chip unset" id="user-chip" title="Quem é você?">
       <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-      <span id="user-chip-name">Identificar-se</span>
+      <select id="user-select" onchange="onUserSelectChange()" aria-label="Quem é você?">
+        <option value="">Identificar-se</option>
+      </select>
     </div>
   </div>
 </header>
@@ -839,8 +863,14 @@
     <h3>Sinalizar tarefa</h3>
     <p class="modal-sub" id="flag-modal-sub">Cliente: —</p>
 
+    <!-- Só leitura: a identidade vem do seletor da barra do topo, que carrega o
+         ID de usuário do ClickUp. Campo digitável aqui reintroduziria justamente
+         o nome sem ID que a perna 0 existe para eliminar. -->
     <label>Seu nome</label>
-    <input type="text" id="flag-author" placeholder="Como devemos te identificar?" />
+    <input type="text" id="flag-author" readonly placeholder="Identifique-se no topo da página" />
+    <div class="modal-hint" id="flag-author-hint" style="display:none">
+      Escolha quem você é no seletor do canto superior direito para poder sinalizar.
+    </div>
 
     <label>Tipo de sinalização</label>
     <div class="flag-options">
@@ -1303,6 +1333,7 @@ async function loadTasks() {
     statusSet = new Set(allTasks.map(t => t.status).filter(Boolean));
     populateStatusFilter();
     populateSolicitanteFilter();
+    populateUserSelect();
     populateTagFilter();
     filterTasks();
     const now = new Date();
@@ -1321,24 +1352,93 @@ async function loadTasks() {
 }
 
 // ---- IDENTIFICAÇÃO DO USUÁRIO ----
-function getUserName() {
-  return localStorage.getItem('analises_monitor_user') || '';
+// A identidade guarda o ID de usuário do ClickUp, não só o nome. O ID vem de
+// graça no campo `Solicitante` (tipo `users`) de cada tarefa, então a lista do
+// seletor é a mesma que o filtro de solicitantes já monta — sem chamada nova e
+// sem lista para manter à mão.
+const USER_KEY = 'analises_monitor_user_v2';        // {id, nome}
+const USER_KEY_LEGACY = 'analises_monitor_user';    // nome digitado à mão (v1)
+
+function getUser() {
+  try {
+    const raw = localStorage.getItem(USER_KEY);
+    if (!raw) return null;
+    const u = JSON.parse(raw);
+    return (u && u.id != null && u.nome) ? u : null;
+  } catch (e) {
+    return null;
+  }
 }
 
-function setUserName(name) {
-  localStorage.setItem('analises_monitor_user', name);
+function getUserName() { return getUser()?.nome || ''; }
+function getUserId()   { const u = getUser(); return u ? u.id : null; }
+
+function setUser(id, nome) {
+  if (id == null || !nome) return;
+  localStorage.setItem(USER_KEY, JSON.stringify({ id: Number(id), nome }));
+  localStorage.removeItem(USER_KEY_LEGACY);
+  updateUserChip();
+}
+
+function clearUser() {
+  localStorage.removeItem(USER_KEY);
   updateUserChip();
 }
 
 function updateUserChip() {
-  const name = getUserName();
-  document.getElementById('user-chip-name').textContent = name || 'Identificar-se';
+  const u = getUser();
+  const sel = document.getElementById('user-select');
+  const chip = document.getElementById('user-chip');
+  if (sel) sel.value = u ? String(u.id) : '';
+  if (chip) chip.classList.toggle('unset', !u);
 }
 
-function promptUserName() {
-  const current = getUserName();
-  const name = prompt('Como devemos te identificar nas sinalizações?', current || '');
-  if (name && name.trim()) setUserName(name.trim());
+function onUserSelectChange() {
+  const sel = document.getElementById('user-select');
+  const id = sel.value;
+  if (!id) { clearUser(); return; }
+  setUser(id, sel.options[sel.selectedIndex].textContent);
+}
+
+// Monta o seletor a partir dos solicitantes das tarefas carregadas. A identidade
+// já salva entra na lista mesmo que a pessoa não seja solicitante de nenhuma
+// tarefa no momento — senão ela se perderia sozinha quando as tarefas dela
+// saíssem da lista.
+function populateUserSelect() {
+  const sel = document.getElementById('user-select');
+  if (!sel) return;
+  const byId = new Map();
+  allTasks.forEach(t => (t.solicitantes || []).forEach(p => {
+    if (p && p.id != null && p.nome) byId.set(String(p.id), p.nome);
+  }));
+
+  const saved = getUser();
+  if (saved && !byId.has(String(saved.id))) byId.set(String(saved.id), saved.nome);
+
+  // Migração da v1: o valor antigo é texto livre, sem ID. Só dá para aproveitar
+  // se casar exatamente com alguém da lista — e não casar é o resultado
+  // esperado numa parcela dos casos ("Aline Costa" não existe no workspace).
+  // Nesses, a pessoa se identifica uma vez e o problema não volta.
+  if (!saved) {
+    const legacy = (localStorage.getItem(USER_KEY_LEGACY) || '').trim();
+    if (legacy) {
+      const alvo = legacy.toLowerCase();
+      const achado = [...byId.entries()].find(([, nome]) => nome.toLowerCase() === alvo);
+      if (achado) setUser(achado[0], achado[1]);
+    }
+  }
+
+  sel.innerHTML = '<option value="">Identificar-se</option>';
+  [...byId.entries()]
+    .sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'))
+    .forEach(([id, nome]) => {
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = nome;
+      sel.appendChild(opt);
+    });
+
+  updateUserChip();
 }
 
 // ---- MODAL DE SINALIZAÇÃO ----
@@ -1353,14 +1453,16 @@ function openFlagModal(taskId, taskName) {
   currentFlagTaskId = taskId;
   currentFlagTaskName = taskName;
   document.getElementById('flag-modal-sub').textContent = `Cliente: ${taskName}`;
-  document.getElementById('flag-author').value = getUserName();
+  const u = getUser();
+  document.getElementById('flag-author').value = u ? u.nome : '';
+  document.getElementById('flag-author-hint').style.display = u ? 'none' : 'block';
   document.querySelectorAll('input[name=flag-type]').forEach(r => r.checked = false);
   document.getElementById('flag-note').value = '';
   document.getElementById('flag-file').value = '';
   document.getElementById('flag-extras').style.display = 'none';
   document.getElementById('flag-feedback').className = 'modal-feedback';
   document.getElementById('flag-feedback').textContent = '';
-  document.getElementById('flag-confirm-btn').disabled = false;
+  document.getElementById('flag-confirm-btn').disabled = !u;
   document.getElementById('flag-confirm-btn').textContent = 'Sinalizar';
   document.getElementById('flag-modal').classList.add('open');
 }
@@ -1371,7 +1473,8 @@ function closeFlagModal() {
 }
 
 async function submitFlag() {
-  const author = document.getElementById('flag-author').value.trim();
+  const user = getUser();
+  const author = user ? user.nome : '';
   const flagType = document.querySelector('input[name=flag-type]:checked')?.value;
   const note = document.getElementById('flag-note').value.trim();
   const fileInput = document.getElementById('flag-file');
@@ -1384,7 +1487,7 @@ async function submitFlag() {
 
   if (!author) {
     feedback.className = 'modal-feedback show err';
-    feedback.textContent = 'Informe seu nome para continuar.';
+    feedback.textContent = 'Escolha quem você é no seletor do canto superior direito para continuar.';
     return;
   }
   if (!flagType) {
@@ -1393,7 +1496,6 @@ async function submitFlag() {
     return;
   }
 
-  setUserName(author);
   btn.disabled = true;
   btn.textContent = file ? 'Enviando anexo...' : 'Enviando...';
 

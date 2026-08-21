@@ -77,6 +77,26 @@ export default async function handler(req, res) {
         return '';
       };
 
+      // Mesma leitura de getPersonField, mas preservando o `id` do usuário do
+      // ClickUp. Campo do tipo `users` devolve o objeto completo — o `id` estava
+      // sendo descartado, e sem ele não há como identificar pessoa com segurança:
+      // o painel caía em casar por nome digitado à mão, que erra ("Aline Costa"
+      // não existe; o workspace tem "Aline Rosa"). Devolve [] quando o valor vem
+      // como texto solto, porque aí não existe id nenhum para recuperar.
+      const getPersonFieldFull = (...names) => {
+        for (const n of names) {
+          const f = cf.find(x => x.name?.toLowerCase().includes(n.toLowerCase()));
+          if (!f || f.value == null) continue;
+          const val = Array.isArray(f.value) ? f.value : [f.value];
+          const people = val
+            .filter(p => p && typeof p === 'object' && p.id != null)
+            .map(p => ({ id: p.id, nome: p.username || p.email || '' }))
+            .filter(p => p.nome);
+          if (people.length) return people;
+        }
+        return [];
+      };
+
       return {
         id: t.id,
         name: t.name || '',
@@ -88,11 +108,20 @@ export default async function handler(req, res) {
         status: t.status?.status || '',
         statusColor: t.status?.color || '',
         assignees: (t.assignees || []).map(a => a.username || a.email || '').filter(Boolean),
+        // Com id: o analista responsável varia por tarefa (Lucas 82010227,
+        // Matheus 43078993, Cassia 42921071, Maria Rita 42926569) e algumas têm
+        // dois. Quem precisa ser avisado de uma sinalização é o assignee da
+        // própria tarefa, então o id não pode ser fixo nem inferido pelo nome.
+        assigneesFull: (t.assignees || [])
+          .filter(a => a && a.id != null)
+          .map(a => ({ id: a.id, nome: a.username || a.email || '' }))
+          .filter(a => a.nome),
         due_date: t.due_date || null,
         url: t.url || '',
         nucleo: getField('núcleo', 'nucleo', 'id núcleo', 'id nucleo'),
         cliente: getField('cliente', 'empresa', 'company'),
         solicitante: getPersonField('solicitante'),
+        solicitantes: getPersonFieldFull('solicitante'),
         jiraUrl: getField('jira issue url', 'jira url', 'jira issue', 'issue url'),
         ambiente: getField('ambiente'),
         urgencia: getField('urgência', 'urgencia'),

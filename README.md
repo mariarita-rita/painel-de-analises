@@ -5,7 +5,38 @@
 - **Régua de trajetória** mostrando quantas tarefas estão em cada etapa do fluxo (Novo Pedido → Finalizado)
 - **Novos campos na tabela**: link direto para o ClickUp, último comentário da tarefa, autor e data do comentário
 - **Sinalização de tarefas**: botão 🚩 em cada linha permite que CSMs/atendimento marquem "Cliente pede retorno" ou "Risco de churn" — isso adiciona automaticamente um **comentário** e uma **tag nativa** na tarefa do ClickUp
-- **Identificação do usuário**: nome salvo no navegador (localStorage), usado para assinar as sinalizações
+- **Identificação do usuário**: seletor na barra do topo, salvo no navegador
+  (localStorage), usado para assinar as sinalizações
+
+## Identificação: por que ela guarda o ID, e não só o nome
+
+A chave `analises_monitor_user_v2` guarda `{id, nome}` — o `id` é o **ID de usuário
+do ClickUp**. A versão anterior (`analises_monitor_user`) guardava só o nome, digitado
+à mão num `prompt()`, e isso não sobrevive ao uso: dos quatro nomes que chegaram a ser
+digitados em sinalizações reais, três casavam com um usuário do workspace e um não
+("Aline Costa" — o workspace tem *Aline Rosa*). Nome digitado não serve para
+identificar pessoa com segurança.
+
+O ID **não precisa de mapa nem de chamada nova**: o campo `Solicitante` do ClickUp é
+do tipo `users` e já devolve `{id, username, email}` em toda tarefa que o
+`/api/tasks` carrega. O `tasks.js` passa isso adiante em `t.solicitantes`
+(`[{id, nome}]`), e o seletor é montado dessa mesma lista — a mesma que alimenta o
+filtro de solicitantes.
+
+Também **não** use `GET /team/{id}/member` como fonte de IDs: ele não devolve todos os
+usuários que aparecem nas tarefas (`Matheus Delamason da Silva`, `43078993`, é
+assignee de dezenas de análises e não consta na lista de membros). A fonte é o payload
+da tarefa.
+
+O `t.assigneesFull` (`[{id, nome}]`) existe pelo mesmo motivo, para quando a
+sinalização passar a mencionar o analista: **o assignee varia por tarefa** — Lucas
+Santos (`82010227`), Matheus Delamason da Silva (`43078993`), Cassia Silva
+(`42921071`), Maria Rita (`42926569`) — e algumas tarefas têm dois. ID fixo estaria
+errado na maioria dos casos.
+
+Migração da v1: se houver valor antigo e ele casar exatamente com um nome da lista, a
+identidade é convertida sozinha. Não casando, a pessoa se identifica uma vez no
+seletor e não é perguntada de novo.
 
 ## Estrutura (arquivos na raiz)
 
@@ -23,7 +54,7 @@ analises-monitor/
 | Nome | Valor |
 |------|-------|
 | `CLICKUP_API_KEY` | `pk_xxxxxxxx_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX` |
-| `CLICKUP_LIST_ID` | `901327701998` |
+| `CLICKUP_LIST_ID` | `901326473282` (lista `🚨 Análises - ISSUE`, space `49108550`) |
 
 Depois de configurar, clique em **Redeploy**.
 
