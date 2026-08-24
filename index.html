@@ -871,7 +871,7 @@
   <div class="stats-grid">
     <div class="stat-card"><div class="stat-label">Total</div><div class="stat-value" id="stat-total">—</div></div>
     <div class="stat-card"><div class="stat-label">Em andamento</div><div class="stat-value accent" id="stat-andamento">—</div></div>
-    <div class="stat-card"><div class="stat-label">Aguard. Jira</div><div class="stat-value jira" id="stat-jira">—</div></div>
+    <div class="stat-card"><div class="stat-label">Análise Tribe Tech</div><div class="stat-value jira" id="stat-tribe">—</div></div>
     <div class="stat-card"><div class="stat-label">Para entregar</div><div class="stat-value entregar" id="stat-entregar">—</div></div>
     <div class="stat-card"><div class="stat-label">Concluídas</div><div class="stat-value muted" id="stat-concluidas">—</div></div>
     <div class="stat-card"><div class="stat-label">Média de dias</div><div class="stat-value accent" id="stat-media">—</div></div>
@@ -1020,8 +1020,19 @@ const JOURNEY = [
   { key: 'analisando n2',      label: 'Analisando N2',      desc: 'Analista já iniciou a análise da situação',          color: '#3A86FF', textColor: '#0A41B4' },
   { key: 'falta de dados',     label: 'Falta de Dados',     desc: 'Faltou informação suficiente para seguir a análise', color: '#CA8A04', textColor: '#854D0E' },
   { key: 'aguardando cliente', label: 'Aguard. Cliente',    desc: 'Aguardando retorno do cliente',                     color: '#CA8A04', textColor: '#854D0E' },
-  { key: 'abrir issue',        label: 'Abrir ISSUE',        desc: 'Preparar análise para escalar para Prod/Dev',        color: '#3A86FF', textColor: '#0A41B4' },
-  { key: 'aguardando jira',    label: 'Aguard. Jira',       desc: 'Aguardando Prod/Dev',                               color: '#CA8A04', textColor: '#854D0E' },
+  // "abrir issue" saiu de uso e não existe mais entre os 13 status da lista no
+  // ClickUp (confirmado em 24/08/2026 via GET /list/901326473282).
+  //
+  // "aguardando jira" também não está aqui de propósito: ele existe no ClickUp
+  // (orderindex 4) mas serve só de gatilho da integração com o Jira — a tarefa
+  // passa e sai. Etapa na régua para um status de passagem só produz coluna
+  // sempre zerada. Enquanto uma tarefa estiver passando por ele, ela conta em
+  // "Outros" e o console.warn a nomeia; é esperado, não status esquecido.
+  //
+  // Chave = nome EXATO como a API devolve: 'análise tribe tech', minúsculo e com
+  // acento. O JOURNEY_INDEX normaliza (tira acento) dos dois lados, então o
+  // casamento não depende disso — mas o nome exato é o que documenta a origem.
+  { key: 'análise tribe tech', label: 'Análise Tribe Tech', desc: 'Em análise pelo time Tribe Tech',                    color: '#CA8A04', textColor: '#854D0E' },
   { key: 'sprint backlog',     label: 'Sprint Backlog',     desc: 'Em fila para entrar em sprint',                      color: '#3A86FF', textColor: '#0A41B4' },
   { key: 'block',              label: 'Block',              desc: 'Bloqueio técnico ou falta de informação',            color: '#DC2626', textColor: '#991B1B' },
   { key: 'interação pendente', label: 'Interação Pendente', desc: 'Prod/Dev aguardando o Analista',                    color: '#CA8A04', textColor: '#854D0E' },
@@ -1185,9 +1196,14 @@ function renderJourney(tasks) {
 function statusClass(s) {
   s = normalizeStatus(s);
   if (s.includes('novo pedido')) return 'novo';
-  if (s.includes('analisando') || s.includes('falta de dados') || s.includes('aguardando cliente') || s.includes('abrir issue') || s.includes('sprint')) return 'andamento';
+  if (s.includes('analisando') || s.includes('falta de dados') || s.includes('aguardando cliente') || s.includes('sprint')) return 'andamento';
   if (s === 'block' || s.includes('bloque')) return 'bloqueado';
-  if (s.includes('aguardando jira') || s.includes('interação pendente')) return 'aguardando';
+  // Os alvos aqui vão SEM acento, porque `s` passou por normalizeStatus, que
+  // remove os diacríticos. 'interação pendente' com acento nunca casava, e essas
+  // análises — que são muitas — caíam em 'outro' em silêncio, com badge cinza.
+  // 'aguardando jira' fica: é status de passagem, mas precisa de cor de badge
+  // coerente enquanto a tarefa passa por ele.
+  if (s.includes('analise tribe tech') || s.includes('aguardando jira') || s.includes('interacao pendente')) return 'aguardando';
   if (s.includes('entregar')) return 'entregar';
   if (s.includes('finaliz') || s.includes('conclu')) return 'finalizado';
   return 'outro';
@@ -1283,7 +1299,12 @@ function renderTable(tasks) {
 function updateStats(tasks) {
   document.getElementById('stat-total').textContent = tasks.length;
   document.getElementById('stat-andamento').textContent = tasks.filter(t => ['novo','andamento'].includes(statusClass(t.status))).length;
-  document.getElementById('stat-jira').textContent = tasks.filter(t => statusClass(t.status) === 'aguardando').length;
+  // Conta SÓ 'análise tribe tech', por igualdade exata, não o balde 'aguardando'
+  // do statusClass — esse balde também contém 'aguardando jira' e 'interação
+  // pendente', e o cartão diz o nome de um status só. Contar o balde faria o
+  // número não corresponder ao rótulo.
+  document.getElementById('stat-tribe').textContent =
+    tasks.filter(t => normalizeStatus(t.status) === 'analise tribe tech').length;
   document.getElementById('stat-entregar').textContent = tasks.filter(t => statusClass(t.status) === 'entregar').length;
   document.getElementById('stat-concluidas').textContent = tasks.filter(t => statusClass(t.status) === 'finalizado').length;
 
@@ -2260,17 +2281,10 @@ function renderDetailTab() {
         </div>
       </div>
       <div class="legend-item">
-        <div class="legend-dot" style="background:#3A86FF"></div>
-        <div class="legend-item-text">
-          <div class="legend-item-name">Abrir ISSUE</div>
-          <div class="legend-item-desc">Preparar análise para escalar para Prod/Dev</div>
-        </div>
-      </div>
-      <div class="legend-item">
         <div class="legend-dot" style="background:#CA8A04"></div>
         <div class="legend-item-text">
-          <div class="legend-item-name">Aguard. Jira</div>
-          <div class="legend-item-desc">Aguardando resolução pelo time de Prod/Dev</div>
+          <div class="legend-item-name">Análise Tribe Tech</div>
+          <div class="legend-item-desc">Em análise pelo time Tribe Tech</div>
         </div>
       </div>
       <div class="legend-item">
