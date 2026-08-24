@@ -59,19 +59,43 @@ export default async function handler(req, res) {
         return '';
       };
 
+      // ARMADILHA: dois campos desta lista contêm "solicitante" no nome —
+      // "Solicitante" (`329ce990-…`, type `users`, a pessoa) e
+      // "Cliente - Solicitante" (`ba361d20-…`, type `short_text`, a razão social
+      // do cliente). O de texto vem ANTES no array, então um `cf.find` por
+      // `includes` pega o cliente e não a pessoa. Era o que acontecia: a coluna
+      // "Solicitante" mostrava a mesma razão social da coluna "Cliente".
+      //
+      // Por isso a busca ordena os candidatos em vez de pegar o primeiro:
+      // nome exato + type `users` primeiro, depois type `users`, depois nome
+      // exato, e só então o resto.
+      const candidatosPara = (nome) => {
+        const alvo = nome.toLowerCase();
+        return cf
+          .filter(x => x.name?.toLowerCase().includes(alvo))
+          .map(x => {
+            const exato = (x.name || '').toLowerCase() === alvo;
+            const pessoa = x.type === 'users';
+            return { f: x, peso: (pessoa && exato) ? 0 : pessoa ? 1 : exato ? 2 : 3 };
+          })
+          .sort((a, b) => a.peso - b.peso)
+          .map(x => x.f);
+      };
+
       const getPersonField = (...names) => {
         for (const n of names) {
-          const f = cf.find(x => x.name?.toLowerCase().includes(n.toLowerCase()));
-          if (!f || f.value == null) continue;
-          const val = f.value;
-          if (Array.isArray(val)) {
-            const ns = val.map(p => p.username || p.email || '').filter(Boolean);
-            if (ns.length) return ns.join(', ');
-          } else if (typeof val === 'object') {
-            const n2 = val.username || val.email || '';
-            if (n2) return n2;
-          } else if (val) {
-            return String(val);
+          for (const f of candidatosPara(n)) {
+            if (f.value == null) continue;
+            const val = f.value;
+            if (Array.isArray(val)) {
+              const ns = val.map(p => p.username || p.email || '').filter(Boolean);
+              if (ns.length) return ns.join(', ');
+            } else if (typeof val === 'object') {
+              const n2 = val.username || val.email || '';
+              if (n2) return n2;
+            } else if (val) {
+              return String(val);
+            }
           }
         }
         return '';
@@ -85,14 +109,15 @@ export default async function handler(req, res) {
       // como texto solto, porque aí não existe id nenhum para recuperar.
       const getPersonFieldFull = (...names) => {
         for (const n of names) {
-          const f = cf.find(x => x.name?.toLowerCase().includes(n.toLowerCase()));
-          if (!f || f.value == null) continue;
-          const val = Array.isArray(f.value) ? f.value : [f.value];
-          const people = val
-            .filter(p => p && typeof p === 'object' && p.id != null)
-            .map(p => ({ id: p.id, nome: p.username || p.email || '' }))
-            .filter(p => p.nome);
-          if (people.length) return people;
+          for (const f of candidatosPara(n)) {
+            if (f.value == null) continue;
+            const val = Array.isArray(f.value) ? f.value : [f.value];
+            const people = val
+              .filter(p => p && typeof p === 'object' && p.id != null)
+              .map(p => ({ id: p.id, nome: p.username || p.email || '' }))
+              .filter(p => p.nome);
+            if (people.length) return people;
+          }
         }
         return [];
       };

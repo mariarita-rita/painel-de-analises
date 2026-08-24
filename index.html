@@ -146,6 +146,11 @@
     border-radius: 8px;
     border: 1.5px solid var(--surface);
   }
+  /* `display` de autor vence a regra [hidden]{display:none} do navegador, então
+     sem esta linha o painel NUNCA esconde: `painel.hidden = true` não tem efeito
+     e o sininho abre sem nunca fechar. Regra com atributo tem especificidade
+     maior que a de classe, então ela ganha da de baixo. */
+  .bell-panel[hidden] { display: none; }
   .bell-panel {
     position: absolute; top: 38px; right: 0; z-index: 60;
     width: 340px; max-height: 420px;
