@@ -1,6 +1,6 @@
 # Estado e próximos passos — Painel de Análises
 
-Última atualização: **21/08/2026**
+Última atualização: **24/08/2026**
 
 Este documento existe porque várias escolhas deste painel são **deliberadas** e o motivo
 não é óbvio a partir do código. Daqui a um mês ninguém vai lembrar por que o
@@ -179,7 +179,8 @@ A paleta registra: `--brand` dá 3.48:1 sobre branco e reprova o AA. Texto azul 
 | `MENCOES_JANELA_MS` (`index.html`) | 30 dias | igual ao piso da rota — nada mais antigo pode voltar a aparecer, então podar é seguro |
 | `MENCOES_MAX` (`index.html`) | `200` | teto de itens no `localStorage` |
 | recarga da tabela | 60 s | `setInterval(loadTasks, 60000)` — é também o ciclo do sininho |
-| `s-maxage` do `/api/tasks` | `30` | vários CSMs colapsam na mesma resposta em vez de multiplicar chamadas |
+| `s-maxage` do `/api/tasks` | `60` | vários CSMs colapsam na mesma resposta. Era `30`, com o cliente recarregando a cada 60 s: meia janela dobrava as chamadas sem entregar dado mais novo. Foi a maior economia de cota do painel, e custa uma linha |
+| `PADRAO_DIAS` (`tasks.js`) | `90` | período das finalizadas quando o cliente não manda `closedDays`. **Só as finalizadas** — análise em aberto nunca é cortada |
 | `Cache-Control` do `/api/mentions` | `no-store` | rota **por usuário**: o mesmo cache entregaria o sininho de uma pessoa para outra |
 
 ---
@@ -221,6 +222,31 @@ a piscar.
 desconhecidos. Há também conferência de soma. Se aparecer "Outros" com número, abra o
 console: o status legítimo que falta está nomeado lá.
 
+**DOIS campos customizados contêm "solicitante" no nome.** `Solicitante`
+(`329ce990-…`, `type: users`, a pessoa) e `Cliente - Solicitante` (`ba361d20-…`,
+`type: short_text`, a razão social). **O de texto vem antes no array que a API devolve**,
+então `cf.find` por `includes` pega o cliente. Foi o que quebrou a identificação em
+produção em 24/08/2026: o seletor ficava sem opções, e daí sem identidade o botão
+Sinalizar ficava desabilitado e o sininho não tinha usuário — três sintomas, uma causa. E
+antes disso o mesmo erro atingia o `getPersonField` em silêncio: a coluna "Solicitante"
+mostrava a mesma razão social da coluna "Cliente". A busca agora **ordena** os candidatos
+(nome exato + `type: users` primeiro) em vez de pegar o primeiro. `getField('cliente')`
+continua caindo em `Cliente - Solicitante` de propósito — ali a razão social é o valor
+certo.
+
+**`display` de autor vence `[hidden] { display: none }` do navegador.** O painel do
+sininho tem `display: flex` e ficava permanentemente visível: `painel.hidden = true` não
+tinha efeito nenhum, e o sininho abria sem nunca fechar. Precisa da regra explícita
+`.bell-panel[hidden] { display: none }`, que tem especificidade de atributo e ganha da de
+classe. **Qualquer elemento novo que combine `hidden` com `display` de autor tem o mesmo
+problema.**
+
+**`normalizeStatus` remove acentos, então alvos de comparação vão SEM acento.** O
+`statusClass` comparava `s.includes('interação pendente')` com acento contra uma string já
+normalizada — condição que nunca era verdadeira, e todas as análises em `interação
+pendente` caíam em `'outro'` com badge cinza. O `JOURNEY_INDEX` não sofria disso porque
+normaliza os dois lados.
+
 **Rota nova precisa de DUAS entradas no `vercel.json`.** Uma em `builds` e uma em
 `routes`. Faltando a de `builds`, a função não é compilada e a rota dá 404 em produção.
 
@@ -232,42 +258,43 @@ gitignore, e isso anula a exceção do `!.env.example`, voltando a ignorá-lo.
 
 ## 6. Pendências
 
-### Ajustes de status na régua — **NÃO feitos**
+### Ajustes de status na régua — **feitos em 24/08/2026**
 
-Pedidos antes e não implementados. Estado verificado em 21/08/2026:
+Os três lugares (`JOURNEY`, `statusClass`, legenda) mais o cartão do topo, que dizia
+"Aguard. Jira" e ficaria incoerente.
 
-| pedido | estado |
-|---|---|
-| remover "Abrir ISSUE" | **não feito** — `index.html:1018` (JOURNEY), `:1183` (classificação em "andamento"), `:2260` (legenda) |
-| trocar "Aguard. Jira" por "Análise Tribe Tech" | **não feito** — "Aguard. Jira" em `index.html:869` (cartão), `:1019` (JOURNEY), `:2267` (legenda). Não existe nenhuma menção a "Tribe Tech" no arquivo |
-| balde "Outros" zerar sozinho | **feito** — `index.html:1145`: só entra na régua quando `outros > 0`, com aviso nomeando os status desconhecidos |
+`abrir issue` removido — confirmado via `GET /list/901326473282` que não existe entre os
+13 status da lista. `análise tribe tech` entrou como etapa, com a chave no nome exato da
+API (minúsculo, com acento).
 
-**Consequência concreta hoje:** o status `análise tribe tech` **existe no ClickUp** (a
-tarefa `86ahw3t1m` está nele) e o `JOURNEY` não tem etapa para ele — então essas análises
-estão caindo em "Outros" agora, e o `console.warn` está nomeando isso a cada carga.
+**`aguardando jira` saiu da régua mas ficou no `statusClass`.** No ClickUp ele existe
+(orderindex 4) e serve só de gatilho da integração com o Jira — a tarefa passa e sai.
+Etapa para status de passagem só produz coluna zerada, mas o badge precisa de cor coerente
+enquanto a tarefa passa. **Consequência esperada:** de vez em quando aparece "Outros: 1"
+com o `console.warn` nomeando `aguardando jira`. Não é status esquecido.
 
-Observação da amostra: em ~169 das 269 análises examinadas, **nenhuma** estava em
-`abrir issue` ou `aguardando jira`. Sugere que esses status já saíram de uso no ClickUp,
-que é o motivo do pedido — mas a amostra não é a lista inteira, então confirme antes de
-remover.
+### `publicado` e `cancelado` caem em "Outros"
 
-Três lugares por etapa: `JOURNEY`, a classificação em `classificar*` (`:1183`) e a
-legenda (`:2253` em diante). Mudar só o `JOURNEY` deixa a legenda mentindo.
+Descoberto pelo teste da régua em 24/08/2026. São status legítimos e configurados na
+lista, e não têm etapa no `JOURNEY` — somam em "Outros" junto com o `aguardando jira`
+transitório, e o `console.warn` nomeia os três. **Não decidido:** se merecem etapa própria
+ou se o lugar deles é mesmo "Outros". Uma linha cada, se merecerem.
 
-### Filtro de data nos finalizados
+### Filtro de data nos finalizados — **feito em 24/08/2026**
 
-145 finalizados carregados sempre. **Não implementado** — não existe nenhum filtro de data
-no `index.html`.
+Seletor *Finalizados: 30 / 90 / 180 dias / todos*, corte na consulta ao ClickUp. Detalhes
+no README, seção "Período das finalizadas". Duas coisas para lembrar:
 
-⚠️ **Cuidado com o que se espera ganhar.** Filtro no front reduz linhas renderizadas, mas
-**não reduz chamada nenhuma**: o `/api/tasks` continua paginando as 269 em 3 chamadas.
-Para reduzir chamada o corte tem de ser no `tasks.js`, na consulta ao ClickUp. Se o ganho
-desejado é cota, é lá; se é leitura de tela, o front basta. **Decida qual antes de
-implementar** — são trabalhos diferentes.
+⚠️ **`date_done_gt` e `statuses[]` continuam NÃO verificados contra a API real.** O corte
+é reaplicado localmente, então a saída está correta de qualquer forma — mas se
+`escopo.dateDoneAplicado` vier `false`, a economia de chamadas **não está acontecendo** e
+vale uma chamada de `curl` para descobrir o parâmetro certo.
 
-Se for no servidor, verificar primeiro quais parâmetros de data o endpoint de lista aceita
-de fato (`date_updated_gt` está verificado e em uso no `mentions.js`; os de fechamento
-não foram testados).
+**A economia real veio de outra linha.** O `s-maxage` do `/api/tasks` era 30 s com o
+cliente recarregando a cada 60 s — meia janela dobrava as chamadas sem entregar dado mais
+novo a ninguém. Subir para 60 s levou de ~6 para ~3 req/min; o corte de data rende ~1
+chamada por carga. Se a cota apertar de novo, o próximo lugar a olhar é o intervalo de
+recarga do cliente (60 → 120 s), não mais filtros.
 
 ### Segurança: as quatro rotas são abertas — **registrado, não resolvido**
 

@@ -13,39 +13,93 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Variáveis de ambiente não configuradas' });
   }
 
+  const DIA_MS = 24 * 60 * 60 * 1000;
+  const PADRAO_DIAS = 90;
+
   try {
-    let page = 0;
-    let allTasks = [];
-    let hasMore = true;
+    // req.query é getter lazy no runtime da Vercel: acessar fora do try faz uma
+    // URL malformada derrubar a função em vez de virar 400.
+    const q = req.query || {};
 
-    while (hasMore) {
-      const url = `https://api.clickup.com/api/v2/list/${LIST_ID}/task?include_closed=true&page=${page}&subtasks=true`;
-      const response = await fetch(url, {
-        headers: { Authorization: API_KEY }
-      });
+    // Corte de data aplicado SÓ às finalizadas. Análise em aberto carrega
+    // sempre, sem corte: esconder uma aberta porque é antiga apaga exatamente o
+    // que mais importa num painel de acompanhamento.
+    let closedDays = PADRAO_DIAS;
+    const pedido = String(q.closedDays == null ? '' : q.closedDays).trim().toLowerCase();
+    if (pedido === 'todos' || pedido === '0') closedDays = 0;
+    else if (/^\d{1,4}$/.test(pedido)) closedDays = Number(pedido);
 
-      // 429 tem tratamento próprio: mensagem clara e Retry-After repassado, sem
-      // retry automático. Reenviar na hora só agrava o estouro de uma cota que é
-      // compartilhada com os outros painéis.
-      if (response.status === 429) {
-        const retryAfter = response.headers?.get?.('Retry-After');
-        if (retryAfter) res.setHeader('Retry-After', retryAfter);
-        return res.status(429).json({
-          error: 'Limite de requisições do ClickUp atingido. Aguarde alguns segundos e tente novamente.',
-          rateLimited: true,
-          retryAfter: retryAfter || null
-        });
+    // 429 tem tratamento próprio: mensagem clara e Retry-After repassado, sem
+    // retry automático. Reenviar na hora só agrava o estouro de uma cota que é
+    // compartilhada com os outros painéis. Como agora há mais de uma consulta,
+    // o paginador sinaliza por exceção tipada e quem trata é o catch.
+    const buscarPaginas = async (base) => {
+      const out = [];
+      let page = 0;
+      for (;;) {
+        const resp = await fetch(`${base}&page=${page}`, { headers: { Authorization: API_KEY } });
+        if (resp.status === 429) {
+          const e = new Error('rate');
+          e.rateLimited = true;
+          e.retryAfter = resp.headers?.get?.('Retry-After') || null;
+          throw e;
+        }
+        if (!resp.ok) {
+          const e = new Error(await resp.text());
+          e.upstream = resp.status;
+          throw e;
+        }
+        const data = await resp.json();
+        const lote = data.tasks || [];
+        out.push(...lote);
+        if (data.last_page || !lote.length) break;
+        page++;
       }
+      return out;
+    };
 
-      if (!response.ok) {
-        const err = await response.text();
-        return res.status(response.status).json({ error: `Erro ClickUp: ${err}` });
-      }
+    const RAIZ = `https://api.clickup.com/api/v2/list/${encodeURIComponent(LIST_ID)}/task?subtasks=true`;
 
-      const data = await response.json();
-      allTasks = allTasks.concat(data.tasks || []);
-      hasMore = !data.last_page && (data.tasks || []).length > 0;
-      page++;
+    let allTasks;
+    let escopo;
+
+    if (!closedDays) {
+      allTasks = await buscarPaginas(`${RAIZ}&include_closed=true`);
+      escopo = { closedDays: 0, corte: null, abertas: null, fechadasNoPeriodo: null, dateDoneAplicado: null };
+    } else {
+      const corte = Date.now() - closedDays * DIA_MS;
+
+      // `include_closed=false` já exclui os status do tipo `closed` — nesta lista,
+      // só `finalizado`. `cancelado` é do tipo `done` e continua vindo aqui, o
+      // que é o que queremos: são poucos e não entram no corte.
+      const [abertas, fechadasBrutas] = await Promise.all([
+        buscarPaginas(`${RAIZ}&include_closed=false`),
+        buscarPaginas(`${RAIZ}&include_closed=true&statuses%5B%5D=finalizado&date_done_gt=${corte}`)
+      ]);
+
+      // ⚠️ `date_done_gt` e `statuses[]` NÃO foram verificados contra a API real.
+      // Então o corte é reaplicado localmente: se a API ignorar os parâmetros, a
+      // saída continua correta — só a economia de chamadas não acontece. É o
+      // mesmo cuidado do `blocosVistos` no mentions.js: parâmetro não verificado
+      // não pode falhar em silêncio.
+      const fechadas = fechadasBrutas.filter(t => Number(t.date_closed || 0) > corte);
+
+      // Dedupe por id: se `statuses[]` for ignorado, a segunda consulta devolve
+      // tarefas que a primeira já trouxe.
+      const porId = new Map();
+      [...abertas, ...fechadas].forEach(t => { if (t && t.id) porId.set(t.id, t); });
+      allTasks = [...porId.values()];
+
+      escopo = {
+        closedDays,
+        corte,
+        abertas: abertas.length,
+        fechadasRecebidas: fechadasBrutas.length,
+        fechadasNoPeriodo: fechadas.length,
+        // Descarte local alto significa que a API devolveu finalizadas fora do
+        // período, isto é: o parâmetro não foi aplicado e não houve economia.
+        dateDoneAplicado: fechadasBrutas.length === fechadas.length
+      };
     }
 
     const tasks = allTasks.map(t => {
@@ -154,9 +208,26 @@ export default async function handler(req, res) {
       };
     });
 
-    res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=60');
-    return res.status(200).json({ tasks, total: tasks.length });
+    // s-maxage 60 (era 30): o cliente já recarrega a cada 60 s, então meia janela
+    // de cache só dobrava as chamadas sem entregar dado mais novo a ninguém. Foi
+    // a maior economia de cota do painel, e custa uma linha — bem mais que o
+    // corte de data, que rende ~1 chamada por carga.
+    // A chave de cache inclui a query, então cada valor de closedDays tem a sua
+    // própria entrada: usuários com períodos diferentes não colapsam na mesma.
+    res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=120');
+    return res.status(200).json({ tasks, total: tasks.length, escopo });
   } catch (e) {
+    if (e.rateLimited) {
+      if (e.retryAfter) res.setHeader('Retry-After', e.retryAfter);
+      return res.status(429).json({
+        error: 'Limite de requisições do ClickUp atingido. Aguarde alguns segundos e tente novamente.',
+        rateLimited: true,
+        retryAfter: e.retryAfter
+      });
+    }
+    if (e.upstream) {
+      return res.status(e.upstream).json({ error: `Erro ClickUp: ${e.message}` });
+    }
     return res.status(500).json({ error: e.message });
   }
 }

@@ -869,12 +869,16 @@
 <main class="main">
 
   <div class="stats-grid">
-    <div class="stat-card"><div class="stat-label">Total</div><div class="stat-value" id="stat-total">—</div></div>
+    <!-- "Em aberto" e não "Total": com corte de data nas finalizadas, um "Total"
+         diria 174 existindo 269. Número exato e sempre completo, porque o corte
+         nunca atinge análise em aberto. Os rótulos com período são preenchidos
+         por atualizarRotulosPeriodo(). -->
+    <div class="stat-card"><div class="stat-label">Em aberto</div><div class="stat-value" id="stat-aberto">—</div></div>
     <div class="stat-card"><div class="stat-label">Em andamento</div><div class="stat-value accent" id="stat-andamento">—</div></div>
     <div class="stat-card"><div class="stat-label">Análise Tribe Tech</div><div class="stat-value jira" id="stat-tribe">—</div></div>
     <div class="stat-card"><div class="stat-label">Para entregar</div><div class="stat-value entregar" id="stat-entregar">—</div></div>
-    <div class="stat-card"><div class="stat-label">Concluídas</div><div class="stat-value muted" id="stat-concluidas">—</div></div>
-    <div class="stat-card"><div class="stat-label">Média de dias</div><div class="stat-value accent" id="stat-media">—</div></div>
+    <div class="stat-card"><div class="stat-label" id="label-concluidas">Concluídas</div><div class="stat-value muted" id="stat-concluidas">—</div></div>
+    <div class="stat-card"><div class="stat-label" id="label-media">Média de dias</div><div class="stat-value accent" id="stat-media">—</div></div>
   </div>
 
   <div class="journey-card">
@@ -901,6 +905,14 @@
     </select>
     <select class="filter-select" id="tag-filter" onchange="filterTasks()">
       <option value="">Todas as etiquetas</option>
+    </select>
+    <!-- Este é o único filtro que recarrega do servidor, porque o corte é feito
+         na consulta ao ClickUp. Os outros filtram o que já está na memória. -->
+    <select class="filter-select" id="closed-filter" onchange="onClosedFilterChange()" title="Período das análises finalizadas">
+      <option value="30">Finalizados: 30 dias</option>
+      <option value="90">Finalizados: 90 dias</option>
+      <option value="180">Finalizados: 180 dias</option>
+      <option value="todos">Finalizados: todos</option>
     </select>
     <span class="results-count" id="results-count"></span>
     <a class="btn-new" href="https://forms.clickup.com/30982952/f/xhgt8-26893/UXLEZ922SIU8ZB4R60" target="_blank" rel="noopener">
@@ -1296,8 +1308,15 @@ function renderTable(tasks) {
   }).join('');
 }
 
+// Os dois status de encerramento da lista: `finalizado` (type closed) e
+// `cancelado` (type done). Nenhum dos dois é "em aberto".
+function ehEncerrada(t) {
+  const s = normalizeStatus(t.status);
+  return s === 'finalizado' || s === 'cancelado';
+}
+
 function updateStats(tasks) {
-  document.getElementById('stat-total').textContent = tasks.length;
+  document.getElementById('stat-aberto').textContent = tasks.filter(t => !ehEncerrada(t)).length;
   document.getElementById('stat-andamento').textContent = tasks.filter(t => ['novo','andamento'].includes(statusClass(t.status))).length;
   // Conta SÓ 'análise tribe tech', por igualdade exata, não o balde 'aguardando'
   // do statusClass — esse balde também contém 'aguardando jira' e 'interação
@@ -1306,7 +1325,10 @@ function updateStats(tasks) {
   document.getElementById('stat-tribe').textContent =
     tasks.filter(t => normalizeStatus(t.status) === 'analise tribe tech').length;
   document.getElementById('stat-entregar').textContent = tasks.filter(t => statusClass(t.status) === 'entregar').length;
-  document.getElementById('stat-concluidas').textContent = tasks.filter(t => statusClass(t.status) === 'finalizado').length;
+  // Igualdade exata com 'finalizado', o mesmo status a que o corte de data se
+  // aplica — para o número do cartão corresponder ao período do rótulo.
+  document.getElementById('stat-concluidas').textContent =
+    tasks.filter(t => normalizeStatus(t.status) === 'finalizado').length;
 
   // Média de dias só para tarefas em aberto (excluindo finalizado e entregar)
   // Média de dias considerando todas as tarefas visíveis com data disponível
@@ -1422,6 +1444,38 @@ function filterTasks() {
   updateStats(filtered);
 }
 
+// ---- PERÍODO DAS FINALIZADAS ----
+// Único filtro que recarrega do servidor: o corte é feito na consulta ao
+// ClickUp, não no front, porque filtrar no front não economizaria chamada
+// nenhuma — as 269 continuariam sendo paginadas.
+const CLOSED_KEY = 'analises_monitor_closed_days_v1';
+const CLOSED_PADRAO = '90';
+
+function getClosedDays() {
+  const v = localStorage.getItem(CLOSED_KEY);
+  if (v === 'todos' || /^\d{1,4}$/.test(v || '')) return v;
+  return CLOSED_PADRAO;
+}
+
+function onClosedFilterChange() {
+  const v = document.getElementById('closed-filter').value;
+  localStorage.setItem(CLOSED_KEY, v);
+  atualizarRotulosPeriodo();
+  loadTasks();
+}
+
+// O período vai para o RÓTULO do cartão, não fica implícito. "Concluídas: 50"
+// existindo 145 é o cartão mentindo em silêncio; "Concluídas (90 d): 50" é o
+// mesmo número dizendo o que ele é.
+function atualizarRotulosPeriodo() {
+  const d = getClosedDays();
+  const sufixo = d === 'todos' ? '' : ` (${d} d)`;
+  document.getElementById('label-concluidas').textContent = `Concluídas${sufixo}`;
+  document.getElementById('label-media').textContent = `Média de dias${sufixo}`;
+  const sel = document.getElementById('closed-filter');
+  if (sel) sel.value = d;
+}
+
 async function loadTasks() {
   const btn = document.getElementById('btn-refresh');
   btn.classList.add('spinning');
@@ -1429,7 +1483,7 @@ async function loadTasks() {
   document.getElementById('last-update').textContent = 'Atualizando...';
 
   try {
-    const res = await fetch('/api/tasks');
+    const res = await fetch(`/api/tasks?closedDays=${encodeURIComponent(getClosedDays())}`);
     if (!res.ok) {
       const err = await res.json();
       throw new Error(err.error || `HTTP ${res.status}`);
@@ -1933,6 +1987,7 @@ document.getElementById('flag-modal').addEventListener('click', (e) => {
 
 updateUserChip();
 atualizarSininho();
+atualizarRotulosPeriodo();
 loadTasks();
 setInterval(loadTasks, 60000);
 </script>

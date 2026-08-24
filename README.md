@@ -86,7 +86,8 @@ painéis**, então vale saber o custo de cada operação:
 
 | Operação | Chamadas ao ClickUp |
 |---|---|
-| `GET /api/tasks` (uma carga da tabela) | 1 por página de 100 tarefas — hoje 3 (269 análises) |
+| `GET /api/tasks`, padrão de 90 dias | **2** — uma consulta das abertas, uma das finalizadas no período |
+| `GET /api/tasks`, "Finalizados: todos" | 3 (269 análises em páginas de 100) |
 | `GET /api/task-detail` (abrir o modal) | 2 (comentários + descrição) |
 | `GET /api/task-detail` reabrindo na sessão | 1 — a descrição vem do cache do front |
 | `POST /api/flag` | 2, ou 3 quando há anexo |
@@ -94,12 +95,57 @@ painéis**, então vale saber o custo de cada operação:
 | `GET /api/mentions`, algo mudou | 1 (lista) + 1 por tarefa alterada, teto de 40 |
 
 O `index.html` recarrega a tabela a cada 60 s, e as respostas de `/api/tasks` têm
-`Cache-Control: s-maxage=30`, então vários usuários simultâneos colapsam na mesma
+`Cache-Control: s-maxage=60`, então vários usuários simultâneos colapsam na mesma
 resposta em cache em vez de multiplicar chamadas.
+
+**A janela de cache era 30 s e virou 60 s, e essa linha economizou mais que o corte de
+data.** Com o cliente recarregando a cada 60 s, meia janela só dobrava as chamadas sem
+entregar dado mais novo a ninguém: eram ~6 req/min, passaram a ~3. O corte de data rende
+~1 chamada por carga; ele existe pela legibilidade da tela e pelo dia em que as análises
+passarem de 400, não pela cota.
+
+A chave de cache inclui a query, então cada valor de `closedDays` tem a sua própria
+entrada — usuários com períodos diferentes deixam de colapsar na mesma resposta.
 
 `tasks.js` **não** busca comentário por tarefa — o último comentário saiu da
 tabela justamente para não gastar uma chamada por linha. Se essa coluna voltar,
 o custo passa a crescer com o número de análises e pode estourar a cota.
+
+## Período das finalizadas
+
+O seletor *Finalizados: 30 / 90 / 180 dias / todos* na barra de filtros é o **único**
+filtro que recarrega do servidor — os outros filtram o que já está na memória. O corte é
+feito na consulta ao ClickUp, porque filtrar no front não economizaria chamada nenhuma:
+as 269 continuariam sendo paginadas. Padrão 90 dias, escolha guardada em
+`analises_monitor_closed_days_v1`.
+
+**O corte vale só para as finalizadas. Análise em aberto carrega sempre.** Esconder uma
+aberta porque é antiga apaga exatamente o que mais importa num painel de acompanhamento —
+é a mesma lição das 289 renovações em atraso no `apps-script-cs`, onde 183 venceram antes
+de 2025. `cancelado` é `type: done` e não `closed`, então vem junto das abertas e também
+não entra no corte; são poucos.
+
+⚠️ **`date_done_gt` e `statuses[]` não foram verificados contra a API real.** Por isso o
+corte é **reaplicado localmente** sobre o resultado: se a API ignorar os parâmetros, a
+saída continua correta e só a economia de chamadas não acontece. O campo `escopo` da
+resposta diz o que houve:
+
+| campo | o que significa |
+|---|---|
+| `escopo.abertas` | quantas análises em aberto vieram |
+| `escopo.fechadasRecebidas` | quantas finalizadas a API devolveu |
+| `escopo.fechadasNoPeriodo` | quantas sobraram depois do filtro local |
+| `escopo.dateDoneAplicado` | `false` = a API devolveu finalizadas fora do período, ou seja **não houve economia** |
+
+Há também dedupe por `id`: se `statuses[]` for ignorado, a segunda consulta devolve
+tarefas que a primeira já trouxe.
+
+**Os cartões dizem o período no rótulo.** "Concluídas: 50" existindo 145 é o cartão
+mentindo em silêncio; "Concluídas (90 d): 50" é o mesmo número dizendo o que ele é. E o
+antigo cartão "Total" virou **"Em aberto"**: com corte de data, um "Total" diria 174
+existindo 269. "Em aberto" é exato, sempre completo, e é o número que um painel de
+monitoramento quer. Saber o total real não é barato — o endpoint de lista não devolve
+contagem, só páginas.
 
 ## Sininho de menções
 
