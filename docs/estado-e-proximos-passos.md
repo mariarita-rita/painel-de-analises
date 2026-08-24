@@ -31,14 +31,23 @@ rotas leem só essas — o sininho **não** introduziu variável nova.
 
 ## 2. O que está no ar
 
-Sincronizado com `main` em 21/08/2026 (PR #1, merge `b600e03`).
-
 - Tabela das análises com filtros (status, solicitante, etiqueta, busca), régua de
   trajetória, cartões de estatística e modal de detalhe
 - Sinalização pelo 🚩 com quatro tipos, nota e anexo
 - **Identificação com ID de usuário do ClickUp** (seletor no topo)
 - **Menção ao analista** na sinalização
 - **Sininho de menções** com varredura incremental e estado no navegador
+- **Régua** com "Análise Tribe Tech", sem "Abrir ISSUE"
+- **Período das finalizadas** (seletor na barra, padrão 90 dias) e `s-maxage` de 60 s
+
+Marcos: PR #1 (`b600e03`, 21/08) trouxe identificação, menção e sininho. As correções de
+produção, a régua e o período vieram em 24/08.
+
+⚠️ **A primeira versão do sininho subiu quebrada** (24/08): o seletor ficava sem opções e
+o painel não fechava. As duas causas estão em §5 — colisão de nome de campo customizado e
+`display` de autor vencendo `[hidden]`. Nenhuma das duas apareceu em teste de sintaxe nem
+em teste de lógica de estado; as duas só apareceriam abrindo a página. **Vale abrir a
+página antes de considerar publicado.**
 
 ---
 
