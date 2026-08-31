@@ -1281,7 +1281,7 @@ function renderTable(tasks) {
       ? t.tags.map(tag => `<span class="tag-pill" style="background:${tag.color}22; color:${tag.color}; border: 0.5px solid ${tag.color}44">${escapeHtml(tag.name)}</span>`).join('')
       : '<span style="color:var(--text-3)">—</span>';
 
-    return `<tr class="clickable" onclick='openDetailModal(${JSON.stringify(t.id)}, ${JSON.stringify(label)})'>
+    return `<tr class="clickable" onclick='openDetailModal(${JSON.stringify(t.id)}, ${JSON.stringify(t.assunto || label)})'>
       <td style="font-family: monospace; font-size: 12px; color: var(--text-2);">${t.nucleo || '<span style="color:var(--text-3)">—</span>'}</td>
       <td class="truncate" title="${escapeHtml(label)}">${escapeHtml(label)}</td>
       <td class="truncate" title="${escapeHtml(t.assunto || '')}" style="color: var(--text-2);">${escapeHtml(t.assunto) || '<span style="color:var(--text-3)">—</span>'}</td>
@@ -2254,7 +2254,9 @@ async function openDetailModal(taskId, taskName) {
 function openFlagFromDetail() {
   if (currentDetailTaskId) {
     closeDetailModal();
-    setTimeout(() => openFlagModal(currentDetailTaskId, currentDetailTaskName), 100);
+    const t = allTasks.find(x => x.id === currentDetailTaskId);
+    const clientName = (t && (t.cliente || t.name)) || currentDetailTaskName;
+    setTimeout(() => openFlagModal(currentDetailTaskId, clientName), 100);
   }
 }
 
