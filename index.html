@@ -67,10 +67,8 @@
   }
 
   .topbar {
-    background: rgba(255,255,255,0.7);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border-bottom: 0.5px solid var(--border-strong);
+    background: var(--brand-night);
+    border-bottom: 0.5px solid rgba(58,134,255,0.25);
     padding: 0 24px;
     display: flex;
     align-items: center;
@@ -84,15 +82,15 @@
   .topbar-left { display: flex; align-items: center; gap: 12px; }
   .logo { width: 28px; height: 28px; background: var(--brand); border-radius: 6px; display: flex; align-items: center; justify-content: center; }
   .logo svg { width: 16px; height: 16px; fill: white; }
-  .topbar-title { font-size: 15px; font-weight: 700; color: var(--text); }
-  .topbar-sub { font-size: 12px; color: var(--text-3); }
+  .topbar-title { font-size: 15px; font-weight: 700; color: #fff; }
+  .topbar-sub { font-size: 12px; color: rgba(255,255,255,0.55); }
   .topbar-right { display: flex; align-items: center; gap: 14px; }
-  .last-update { font-size: 12px; color: var(--text-3); }
+  .last-update { font-size: 12px; color: rgba(255,255,255,0.45); }
   .user-chip {
     font-size: 12px;
-    color: var(--text-2);
-    background: var(--surface-2);
-    border: 0.5px solid var(--border-strong);
+    color: rgba(255,255,255,0.85);
+    background: rgba(255,255,255,0.08);
+    border: 0.5px solid rgba(255,255,255,0.18);
     padding: 5px 10px;
     border-radius: 20px;
     display: flex;
@@ -112,17 +110,17 @@
     cursor: pointer;
     outline: none;
     appearance: none;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23FFFFFF' stroke-width='2'><polyline points='6 9 12 15 18 9'/></svg>");
     background-repeat: no-repeat;
     background-position: right center;
     background-size: 12px 12px;
   }
   .user-chip select option { color: var(--text); background: var(--surface); }
   /* Sem identidade escolhida o chip pede ação em vez de parecer preenchido.
-     Borda em --brand, texto em --accent-text: --brand dá 3.48:1 e reprova o AA
-     em texto pequeno, como a própria paleta registra. */
-  .user-chip.unset { border-color: var(--brand); color: var(--accent-text); }
-  .user-chip.unset select { color: var(--accent-text); }
+     --brand-light em vez de --accent-text: sobre o azul-noite do topbar, o
+     azul profundo de --accent-text quase some — precisa do tom claro. */
+  .user-chip.unset { border-color: var(--brand); color: var(--brand-light); }
+  .user-chip.unset select { color: var(--brand-light); }
 
   /* ---- SININHO DE MENÇÕES ---- */
   .bell-wrap { position: relative; display: flex; align-items: center; }
@@ -130,13 +128,13 @@
     position: relative;
     display: flex; align-items: center; justify-content: center;
     width: 30px; height: 30px; padding: 0;
-    background: var(--surface-2);
-    border: 0.5px solid var(--border-strong);
+    background: rgba(255,255,255,0.08);
+    border: 0.5px solid rgba(255,255,255,0.18);
     border-radius: 50%;
-    color: var(--text-2);
+    color: rgba(255,255,255,0.75);
     cursor: pointer;
   }
-  .bell:hover { border-color: var(--brand); color: var(--accent-text); }
+  .bell:hover { border-color: var(--brand); color: var(--brand-light); }
   .bell svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .bell-badge {
     position: absolute; top: -4px; right: -4px;
@@ -144,7 +142,7 @@
     background: var(--red); color: #fff;
     font-size: 10px; font-weight: 700; line-height: 16px; text-align: center;
     border-radius: 8px;
-    border: 1.5px solid var(--surface);
+    border: 1.5px solid var(--brand-night);
   }
   /* `display` de autor vence a regra [hidden]{display:none} do navegador, então
      sem esta linha o painel NUNCA esconde: `painel.hidden = true` não tem efeito
@@ -273,7 +271,7 @@
     flex-shrink: 0;
   }
 
-  .journey-step.active .journey-dot { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+  .journey-step.active .journey-dot { background: var(--brand-dark); box-shadow: 0 0 0 3px var(--accent-bg); }
   .journey-step.block .journey-dot { background: var(--red); }
   .journey-step.pending .journey-dot { background: var(--yellow); }
 
@@ -447,7 +445,7 @@
   .btn-new {
     padding: 8px 16px;
     border-radius: var(--radius);
-    background: var(--accent);
+    background: var(--brand-dark);
     color: white;
     font-size: 13px;
     font-weight: 500;
@@ -502,13 +500,13 @@
   .dias-neutro  { background: var(--gray-bg); color: var(--gray-text); }
 
   thead th {
-    background: var(--surface-2);
-    border-bottom: 0.5px solid var(--border-strong);
+    background: var(--brand-night);
+    border-bottom: 0.5px solid rgba(58,134,255,0.25);
     padding: 8px 10px;
     text-align: left;
     font-size: 10px;
     font-weight: 600;
-    color: var(--text-3);
+    color: rgba(255,255,255,0.6);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     white-space: normal;
@@ -530,10 +528,10 @@
   }
   td.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 130px; }
 
-  thead th:last-child, tbody td:last-child {
+  tbody td:last-child {
     background: var(--surface);
   }
-  thead th:last-child { background: var(--surface-2); }
+  thead th:last-child { background: var(--brand-night); }
   tbody tr:hover td:last-child { background: var(--surface-2); }
 
   /* Ordenação */
@@ -541,7 +539,7 @@
     cursor: pointer;
     user-select: none;
   }
-  thead th.sortable:hover { color: var(--accent); }
+  thead th.sortable:hover { color: var(--brand-light); }
   thead th .sort-icon { margin-left: 4px; opacity: 0.4; font-style: normal; }
   thead th.sort-asc .sort-icon::after { content: '▲'; opacity: 1; }
   thead th.sort-desc .sort-icon::after { content: '▼'; opacity: 1; }
@@ -678,7 +676,7 @@
     border-bottom: 2px solid transparent; margin-bottom: -0.5px;
     font-family: inherit;
   }
-  .detail-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .detail-tab.active { color: var(--brand-dark); border-bottom-color: var(--brand-dark); }
   .detail-tab:hover:not(.active) { color: var(--text); }
 
   .detail-body {
@@ -730,7 +728,7 @@
   .badge.novo        { background: var(--brand-light); color: var(--brand-night); }
   .badge.novo .badge-dot { background: var(--brand-dark); }
   .badge.andamento   { background: var(--accent-bg); color: var(--accent-text); }
-  .badge.andamento .badge-dot { background: var(--brand); }
+  .badge.andamento .badge-dot { background: var(--brand-dark); }
   .badge.bloqueado   { background: var(--danger-bg); color: var(--danger-text); }
   .badge.bloqueado .badge-dot { background: var(--red); }
   .badge.aguardando  { background: var(--warning-bg); color: var(--warning-text); }
@@ -743,7 +741,7 @@
   .badge.outro .badge-dot { background: var(--text-3); }
 
   .jira-link {
-    color: var(--accent); text-decoration: none; font-size: 12px; font-weight: 500;
+    color: var(--brand-dark); text-decoration: none; font-size: 12px; font-weight: 500;
     display: inline-flex; align-items: center; gap: 3px;
   }
   .jira-link:hover { text-decoration: underline; }
@@ -814,7 +812,7 @@
     font-weight: 500; cursor: pointer; border: none; font-family: inherit;
   }
   .modal-btn.cancel { background: var(--surface-2); color: var(--text-2); border: 0.5px solid var(--border-strong); }
-  .modal-btn.confirm { background: var(--accent); color: white; }
+  .modal-btn.confirm { background: var(--brand-dark); color: white; }
   .modal-btn.confirm:disabled { opacity: 0.5; cursor: not-allowed; }
   .modal input[type=text][readonly] { opacity: 0.75; cursor: not-allowed; }
   .modal-hint { font-size: 11px; color: var(--text-3); margin-top: 5px; line-height: 1.4; }
