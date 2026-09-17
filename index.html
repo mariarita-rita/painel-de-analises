@@ -602,6 +602,8 @@
     white-space: nowrap;
   }
   .btn-flag-modal:hover { background: #FEE2E2; }
+  .btn-flag-modal:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn-flag-modal:disabled:hover { background: #FEF2F2; }
 
   .detail-header-left h2 { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
   .detail-header-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 6px; }
@@ -765,6 +767,8 @@
     font-size: 13px; transition: transform 0.1s, background 0.1s;
   }
   .flag-btn:hover { background: var(--border); transform: scale(1.08); }
+  .flag-btn:disabled { opacity: 0.35; cursor: not-allowed; filter: grayscale(1); }
+  .flag-btn:disabled:hover { background: var(--surface-2); transform: none; }
 
   .empty-state { text-align: center; padding: 56px 24px; color: var(--text-3); }
   .empty-state svg { width: 36px; height: 36px; stroke: var(--text-3); fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; margin-bottom: 12px; }
@@ -1269,7 +1273,8 @@ function renderTable(tasks) {
   }
 
   tbody.innerHTML = tasks.map(t => {
-    const overdue = isOverdue(t.due_date) && statusClass(t.status) !== 'finalizado';
+    const finalizada = statusClass(t.status) === 'finalizado';
+    const overdue = isOverdue(t.due_date) && !finalizada;
     const dateStr = formatDate(t.due_date);
     const jiraUrl = t.jiraUrl || '';
     const key = jiraKey(jiraUrl);
@@ -1301,7 +1306,7 @@ function renderTable(tasks) {
         </a>
       </td>
       <td onclick="event.stopPropagation()">
-        <button class="flag-btn" title="Sinalizar" onclick='openFlagModal("${t.id}", ${JSON.stringify(label).replace(/'/g, "&#39;")})'>🚩</button>
+        <button class="flag-btn" title="${finalizada ? 'Análise finalizada — sinalização bloqueada' : 'Sinalizar'}" ${finalizada ? 'disabled' : `onclick='openFlagModal("${t.id}", ${JSON.stringify(label).replace(/'/g, "&#39;")})'`}>🚩</button>
       </td>
     </tr>`;
   }).join('');
@@ -1891,6 +1896,11 @@ function updateFlagExtras() {
 }
 
 function openFlagModal(taskId, taskName) {
+  // Segunda barreira além do botão desabilitado: cobre o caso de um refresh em
+  // segundo plano mudar o status para finalizado entre o render e o clique.
+  const t = allTasks.find(x => x.id === taskId);
+  if (t && statusClass(t.status) === 'finalizado') return;
+
   currentFlagTaskId = taskId;
   currentFlagTaskName = taskName;
   document.getElementById('flag-modal-sub').textContent = `Cliente: ${taskName}`;
@@ -2189,6 +2199,10 @@ async function openDetailModal(taskId, taskName) {
 
   // Pega dados da tarefa do allTasks
   const t = allTasks.find(x => x.id === taskId);
+  const flagBtn = document.getElementById('detail-flag-btn');
+  const finalizada = t && statusClass(t.status) === 'finalizado';
+  flagBtn.disabled = finalizada;
+  flagBtn.title = finalizada ? 'Análise finalizada — sinalização bloqueada' : '';
   if (t) {
     document.getElementById('detail-meta').innerHTML = `
       ${badge(t.status)}
